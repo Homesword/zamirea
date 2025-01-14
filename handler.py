@@ -3,6 +3,9 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from fastapi.responses import RedirectResponse
 import secrets
+import os
+import sqlite3 as sq
+import bcrypt
 
 
 router = APIRouter()
@@ -10,7 +13,7 @@ path_templates = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=path_templates)
 
 
-@router.get("/") # .get тут - тип запроса
+@router.get("/") 
 async def index(request: Request):
     user_logged = request.session.get("user_logged")
     if not(user_logged):
@@ -25,20 +28,32 @@ async def login_page(request: Request):
         return RedirectResponse(url="/")
     csrf_token = generate_csrf_token()
     request.session["csrf_token"] = csrf_token
-    return templates.TemplateResponse("login.html", {"request": request, "csrf_token": csrf_token})
+    return templates.TemplateResponse("login.html", {"request": request, "csrf_token": csrf_token, "text_header": "Войти"})
 
 
-@router.post('/login') # логика входа в аккаунт через БД
+@router.post('/login') 
 async def login(request: Request):
-    form_data = await request.form()  
+    form_data = await request.form() 
+
     # проверка csrf
     csrf_token = form_data.get("csrf_token")  
     if request.session["csrf_token"] != csrf_token:
-        return RedirectResponse(url="/login")
+        return RedirectResponse(url="/login", status_code=303)
+    
     login = form_data.get("login")
     password = form_data.get("password")  
-    pass 
-
+    db_path = os.path.join(os.path.dirname(__file__), "users.db")
+    with sq.connect(db_path) as con:
+        cur = con.cursor() 
+        cur.execute(f"SELECT login, password FROM users WHERE login = ? LIMIT 1", (login.lower(),)) 
+        test_user = cur.fetchone()
+        if (test_user) and (check_password(test_user[1], password)): # успешный вход
+            request.session["user_logged"] = True
+            # ДОПИСАТЬ ПЕРЕДАЧУ ДАННЫХ
+            return RedirectResponse(url="/", status_code=303)
+        else: # неправильная почта или пароль
+            return templates.TemplateResponse("login.html", {"request": request, "csrf_token": csrf_token, "text_header": "Неправильная почта или пароль."})
+ 
 
 @router.get('/register')
 async def register_page(request: Request):
@@ -47,21 +62,42 @@ async def register_page(request: Request):
         return RedirectResponse(url="/")
     csrf_token = generate_csrf_token()
     request.session["csrf_token"] = csrf_token
-    return templates.TemplateResponse("register.html", {"request": request, "csrf_token": csrf_token})
+    return templates.TemplateResponse("register.html", {"request": request, "csrf_token": csrf_token, "text_header": "Регистрация"})
 
 
 @router.post('/register')
-async def register(request: Request): # логика регистрации через БД
+async def register(request: Request):
     form_data = await request.form()  
-    # проверка csrf
     csrf_token = form_data.get("csrf_token")  
-    if request.session["csrf_token"] != csrf_token:
-        return RedirectResponse(url="/register")
-    name = form_data.get("name")
-    login = form_data.get("login")
+
+    if request.session["csrf_token"] != csrf_token: # проверка csrf
+        return RedirectResponse(url="/register", status_code=303)
+    
     pass1 = form_data.get("pass1")
     pass2 = form_data.get("pass2")
-    pass
+
+    if pass1 != pass2: # несовпадение паролей
+        return templates.TemplateResponse("register.html", {"request": request, "csrf_token": csrf_token, "text_header": "Пароли не совпадают."})
+    
+    login = form_data.get("login")
+    name = form_data.get("name")
+    db_path = os.path.join(os.path.dirname(__file__), "users.db")
+
+    with sq.connect(db_path) as con: # проверка, если логин уже есть в БД
+        cur = con.cursor() 
+        cur.execute(f"SELECT login FROM users WHERE login = ? LIMIT 1", (login,))
+        test_login = cur.fetchone()
+        if test_login: 
+            return templates.TemplateResponse("register.html", {"request": request, "csrf_token": csrf_token, "text_header": "Аккаунт с данной почтой уже зарегистрирован."})
+    
+    # запись нового пользователя в БД
+    hashed_password = hash_password(pass1) 
+    cur.execute(f"INSERT INTO users (name, login, password) VALUES (?, ?, ?)", (name, login.lower(), hashed_password))
+    con.commit()
+    request.session["user_logged"] = True
+    # ДОПИСАТЬ ПЕРЕДАЧЧУ ДАННЫХ
+    return RedirectResponse(url="/", status_code=303) 
+    pass 
 
 
 @router.get('/privacy')
@@ -72,3 +108,12 @@ async def privacy(request: Request):
 # генерация токена для каждой формы
 def generate_csrf_token():
     return secrets.token_urlsafe(32)
+
+
+def hash_password(password):
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+
+def check_password(stored_password, provided_password):
+    return bcrypt.checkpw(provided_password.encode('utf-8'), stored_password.encode('utf-8'))
