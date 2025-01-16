@@ -18,7 +18,9 @@ async def index(request: Request):
     user_logged = request.session.get("user_logged")
     if not(user_logged):
         return RedirectResponse(url="/login")
-    return templates.TemplateResponse("index.html", {"request": request})
+    user_data = request.session['user_data']
+    return templates.TemplateResponse("index.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
+                                                     "path": user_data['path'], "rowid": user_data['rowid']})
 
 
 @router.get('/login')
@@ -45,11 +47,16 @@ async def login(request: Request):
     db_path = os.path.join(os.path.dirname(__file__), "users.db")
     with sq.connect(db_path) as con:
         cur = con.cursor() 
-        cur.execute(f"SELECT login, password FROM users WHERE login = ? LIMIT 1", (login.lower(),)) 
+        cur.execute(f"SELECT * FROM users WHERE login = ? LIMIT 1", (login.lower(),)) 
         test_user = cur.fetchone()
-        if (test_user) and (check_password(test_user[1], password)): # успешный вход
+        if (test_user) and (check_password(test_user[2], password)): # успешный вход
             request.session["user_logged"] = True
-            # ДОПИСАТЬ ПЕРЕДАЧУ ДАННЫХ
+            request.session["user_data"] = {
+                'name': test_user[0],
+                'login': login.lower(),
+                'path': test_user[3],
+                'rowid': f"{cur.lastrowid}"
+            }
             return RedirectResponse(url="/", status_code=303)
         else: # неправильная почта или пароль
             return templates.TemplateResponse("login.html", {"request": request, "csrf_token": csrf_token, "text_header": "Неправильная почта или пароль."})
@@ -76,7 +83,7 @@ async def register(request: Request):
     pass1 = form_data.get("pass1")
     pass2 = form_data.get("pass2")
 
-    if pass1 != pass2: # несовпадение паролей
+    if pass1 != pass2: # разные пароли
         return templates.TemplateResponse("register.html", {"request": request, "csrf_token": csrf_token, "text_header": "Пароли не совпадают."})
     
     login = form_data.get("login")
@@ -95,9 +102,13 @@ async def register(request: Request):
     cur.execute(f"INSERT INTO users (name, login, password) VALUES (?, ?, ?)", (name, login.lower(), hashed_password))
     con.commit()
     request.session["user_logged"] = True
-    # ДОПИСАТЬ ПЕРЕДАЧЧУ ДАННЫХ
-    return RedirectResponse(url="/", status_code=303) 
-    pass 
+    request.session["user_data"] = {
+        'name': name,
+        'login': login.lower(),
+        'path': "/static/assets/images/my-profile.jpg",
+        'rowid': f"{cur.lastrowid}"
+    }
+    return RedirectResponse(url="/", status_code=303)  
 
 
 @router.get('/privacy')
@@ -105,7 +116,12 @@ async def privacy(request: Request):
     return templates.TemplateResponse("privacy.html", {"request": request})
 
 
-# генерация токена для каждой формы
+@router.get('/logout')
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/", status_code=303) 
+
+
 def generate_csrf_token():
     return secrets.token_urlsafe(32)
 
