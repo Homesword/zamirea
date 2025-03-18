@@ -44,7 +44,7 @@ async def login(request: Request):
     
     login = form_data.get("login")
     password = form_data.get("password")  
-    db_path = os.path.join(os.path.dirname(__file__), "users.db")
+    db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
     with sq.connect(db_path) as con:
         cur = con.cursor() 
         cur.execute(f"SELECT * FROM users WHERE login = ? LIMIT 1", (login.lower(),)) 
@@ -88,7 +88,7 @@ async def register(request: Request):
     
     login = form_data.get("login")
     name = form_data.get("name")
-    db_path = os.path.join(os.path.dirname(__file__), "users.db")
+    db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
 
     with sq.connect(db_path) as con: # проверка, если логин уже есть в БД
         cur = con.cursor() 
@@ -108,7 +108,7 @@ async def register(request: Request):
         'path': "/static/assets/images/my-profile.jpg",
         'rowid': f"{cur.lastrowid}"
     }
-    return RedirectResponse(url="/", status_code=303)  
+    return RedirectResponse(url=f"/messages", status_code=303) 
 
 
 @router.get('/privacy')
