@@ -29,73 +29,29 @@ async def messages_redirect(request: Request):
 
 @chat_router.get("/messages/{id}") 
 async def messages(request: Request, id: str):
-    not_key = 1
     try:
         rowid = request.session['user_data']['rowid']
-        now_sender = ''
-        recipient = ''
-        recipient_value = ''
         # проверка, чтобы не писал сам себе
         if rowid == id:
             return RedirectResponse(url="/", status_code=303) 
         user_data = request.session['user_data']
-        with sq.connect(db_path) as con:
-            cur = con.cursor()
-            cur.execute("SELECT key FROM keys WHERE id = ? LIMIT 1", (rowid,))
-            key_sender = cur.fetchone() # если у человека есть ключи
-            if key_sender:
-                ############ ПЕРЕПИСКА
-                not_key = 0
-                # берём с типом 0, тк мы можем расшифровать только то, что было закодировано нашим публичным ключом.
-                cur.execute("""SELECT * FROM messages WHERE id_sender = ? AND receiver_id = ? AND type = ?""", (rowid, id, 0))
-                now_sender = cur.fetchall() # вся история переписки с точки зрения отправителя 
-                # берём с типом 1, тк мы можем расшифровать только то, что было закодировано нашим публичным ключом.
-                cur.execute(f"""SELECT * FROM messages WHERE id_sender = ? AND receiver_id = ? AND type = ?""", (id, rowid, 1))
-                recipient = cur.fetchall() # вся история переписки с челом с точки зрения получателя
-                cur.execute(f"SELECT * FROM users LIMIT 1 OFFSET {int(id)-1}")
-                recipient_value = cur.fetchone()
-            
-            ############ ИТОГОВАЯ ПЕРЕПИСКИ ПО ДАТАМ 
-            messages_in_chat = now_sender + recipient
-            messages_sorted = sorted(messages_in_chat, key=lambda msg: datetime.strptime(msg[3], "%Y.%m.%d %H:%M:%S"))
-            print(messages_sorted)
+        not_key, now_sender, recipient, recipient_value = get_message(rowid=rowid, id=id)
 
-            
-            ############ ДРУГИЕ ЧАТЫ
-            # with sq.connect(db_path) as con:
-            #     cur = con.cursor()
-            #     cur.execute("SELECT id_sender, receiver_id FROM messages WHERE id_sender = ? OR receiver_id = ?", (rowid, rowid))
-            #     other_chats = cur.fetchall()
+        ############ ИТОГОВАЯ ПЕРЕПИСКИ ПО ДАТАМ 
+        messages_in_chat = now_sender + recipient
+        messages_sorted = sorted(messages_in_chat, key=lambda msg: datetime.strptime(msg[3], "%Y.%m.%d %H:%M:%S"))
 
-            # # создаём множество для уникальных ID собеседников
-            # chat_ids = set()
-            # for sender, receiver in other_chats:
-            #     chat_ids.add(sender)
-            #     chat_ids.add(receiver)
-            # # удаляем свой собственный ID
-            # chat_ids.discard(rowid)
+        ############ ДРУГИЕ ЧАТЫ
 
-            # # получаем данные о собеседниках 
-            # chats = []
-            # if chat_ids:
-            #     with sq.connect(db_path) as con:
-            #         cur = con.cursor()
-            #         # Строим строку плейсхолдеров для IN-запроса (например: "?, ?, ?")
-            #         placeholders = ','.join('?' for _ in chat_ids)
-            #         query = f"SELECT id, name, path FROM users WHERE id IN ({placeholders})"
-            #         cur.execute(query, tuple(chat_ids))
-            #         users = cur.fetchall()
-            #         for user in users:
-            #             chats.append([user[0], user[1], user[2]])
-            #     lenght_chats = len(chats)
 
-            ############### ПЕРЕДАВАТЬ СООБЩЕНИЯ
-            return templates.TemplateResponse("messages.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
-                                                     "path": user_data['path'], "rowid": user_data['rowid'], "not_key": not_key, 
-                                                     "now_sender":now_sender, "recipient":recipient, "recipient_value": recipient_value, 
-                                                     "messages_sorted":messages_sorted})
+
+
+        return templates.TemplateResponse("messages.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
+                                                    "path": user_data['path'], "rowid": int(user_data['rowid']), "not_key": not_key, 
+                                                    "now_sender":now_sender, "recipient":recipient, "recipient_value": recipient_value, 
+                                                    "messages_sorted":messages_sorted})
     except Exception as e:
-        print("Ошибка1 :", e)
+        print("Ошибка в переписке:", e)
         raise HTTPException(status_code=500, detail="Ошибка сервера")
         
 
@@ -125,6 +81,7 @@ def save_public_key(request: PublicKeyRequest, rowid: str):
 
 
 # отправка сообщения 
+########### ДОПИСАТЬ
 @chat_router.post("/send-message/{rowid}")
 def send_message(request: Request, rowid: str):
     try:
@@ -192,7 +149,7 @@ def send_message(request: Request, rowid: str):
          return RedirectResponse(url="/", status_code=303) 
 
 
-# отправка сообщения от администратора
+# отправка приветственного сообщения от администратора
 def send_admin_message(rowid):
     with sq.connect(db_path) as con:
         cur = con.cursor()
@@ -206,12 +163,14 @@ def send_admin_message(rowid):
 
         # загружаем публичный ключ из PEM-формата
         recipient_public_key = serialization.load_pem_public_key(
-            recipient_key_pem[0].encode(),  # Теперь мы кодируем сам ключ, а не объект
+            recipient_key_pem[0].encode(),  
             backend=default_backend()
         )
 
         # шифруем сообщение
-        message = "Приветствую Вас на сервере Шизофрения".encode()
+        message = f"""Приветствуем тебя в ZaMiReA!
+        Не забудь ознакомиться с политикой соглашения) by Homesword, тг: https://t.me/Homesword""".encode()
+
         encode_message = base64.b64encode(recipient_public_key.encrypt(
             message,
             padding.OAEP(
@@ -228,3 +187,31 @@ def send_admin_message(rowid):
                                                    date.strftime("%Y.%m.%d %H:%M:%S"), 1))
         con.commit()
 
+
+# переписка 
+def get_message(rowid, id):
+    with sq.connect(db_path) as con:
+            not_key = 1
+            cur = con.cursor()
+            cur.execute("SELECT key FROM keys WHERE id = ? LIMIT 1", (rowid,))
+            now_sender, recipient, recipient_value = '', '', ''
+            key_sender = cur.fetchone() # если у человека есть ключи
+            if key_sender:
+                ############ ПРОВЕРКА, ЧТО ЧЕЛ КОТОРОМУ МЫ ПИШЕМ СУЩЕСТВУЕТ
+                cur.execute("SELECT key FROM keys WHERE id = ? LIMIT 1", (id,))
+                recipient_key = cur.fetchone()
+                if not(recipient_key):
+                    return RedirectResponse(url="/", status_code=303) 
+                ############ ПЕРЕПИСКА
+                not_key = 0
+                # берём с типом 0, тк мы можем расшифровать только то, что было закодировано нашим публичным ключом.
+                cur.execute("""SELECT * FROM messages WHERE id_sender = ? AND receiver_id = ? AND type = ?""", (rowid, id, 0))
+                now_sender = cur.fetchall() # вся история переписки с точки зрения отправителя 
+                # берём с типом 1, тк мы можем расшифровать только то, что было закодировано нашим публичным ключом.
+                cur.execute(f"""SELECT * FROM messages WHERE id_sender = ? AND receiver_id = ? AND type = ?""", (id, rowid, 1))
+                recipient = cur.fetchall() # вся история переписки с челом с точки зрения получателя
+                cur.execute(f"SELECT * FROM users LIMIT 1 OFFSET {int(id)-1}")
+                recipient_value = cur.fetchone()
+                return [not_key, now_sender, recipient, recipient_value]
+            return [1, "", "", ""]
+            
