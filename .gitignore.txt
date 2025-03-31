@@ -1,6 +1,0 @@
-users.db
-start.bat
-requirements.txt
-test_db.py
-asd.py
-from_test.db
