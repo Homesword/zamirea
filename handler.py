@@ -11,6 +11,7 @@ import bcrypt
 router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=path_templates)
+db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
 
 
 @router.get("/") 
@@ -43,8 +44,7 @@ async def login(request: Request):
         return RedirectResponse(url="/login", status_code=303)
     
     login = form_data.get("login")
-    password = form_data.get("password")  
-    db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
+    password = form_data.get("password")
     with sq.connect(db_path) as con:
         cur = con.cursor() 
         cur.execute(f"SELECT * FROM users WHERE login = ? LIMIT 1", (login.lower(),)) 
@@ -88,7 +88,6 @@ async def register(request: Request):
     
     login = form_data.get("login")
     name = form_data.get("name")
-    db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
 
     with sq.connect(db_path) as con: # проверка, если логин уже есть в БД
         cur = con.cursor() 

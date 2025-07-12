@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from handler import router
 from messages import chat_router 
+from profiles import profiles_router
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -22,3 +23,4 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 # подключаем маршруты 
 app.include_router(router)
 app.include_router(chat_router)
+app.include_router(profiles_router)

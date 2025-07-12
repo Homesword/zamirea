@@ -28,11 +28,15 @@ class MessageRequest(BaseModel):
 
 @chat_router.get("/messages")
 async def messages_redirect(request: Request):
+    if not(request.session.get("user_logged")):
+        return RedirectResponse(url="/")
     return RedirectResponse(url="/messages/1", status_code=303)
 
 
 @chat_router.get("/messages/{id}") 
 async def messages(request: Request, id: str):
+    if not(request.session.get("user_logged")):
+        return RedirectResponse(url="/")
     try:
         rowid = request.session['user_data']['rowid']
         # проверка, чтобы не писал сам себе
@@ -46,11 +50,14 @@ async def messages(request: Request, id: str):
         messages_sorted = sorted(messages_in_chat, key=lambda msg: datetime.strptime(msg[3], "%Y.%m.%d %H:%M:%S"))
 
         ############ ДРУГИЕ ЧАТЫ
-        other_chats = get_other_chats(int(rowid))
+        int_rowid = int(rowid)
+        other_chats = get_other_chats(int_rowid)
+        other_subscribers = get_subscribers(int_rowid)
         return templates.TemplateResponse("messages.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                     "path": user_data['path'], "rowid": int(user_data['rowid']), "not_key": not_key, 
-                                                    "id_recipient":id, "recipient_value": recipient_value, 
-                                                    "messages_sorted":messages_sorted, "other_chats": other_chats})
+                                                    "id_recipient": id, "recipient_value": recipient_value, 
+                                                    "messages_sorted": messages_sorted, "other_chats": other_chats,
+                                                    "other_subscribers": other_subscribers})
     except Exception as e:
         print("Ошибка в переписке:", e)
         raise HTTPException(status_code=500, detail="Ошибка сервера")
@@ -222,12 +229,24 @@ def get_other_chats(id: int):
             list_infos = []
             # итоговый список с id и данными юзера
             for i in all_id:
-                print(id, type(id))
                 if i[0] == id:
                     cur.execute("SELECT name, avatar from users WHERE rowid = ?", (i[1],))
-                    list_infos.append([i[1], cur.fetchone()])
+                    list_infos.insert(0, [i[1], cur.fetchone()])
                 else:
                     cur.execute("SELECT name, avatar from users WHERE rowid = ?", (i[0],))
-                    list_infos.append([i[0], cur.fetchone()])
+                    list_infos.insert(0, [i[0], cur.fetchone()])
             
             return list_infos
+    
+def get_subscribers(id: int):
+     with sq.connect(db_path) as con:
+            cur = con.cursor()
+            cur.execute("SELECT author from subscribers WHERE subscriber = ?", (id,))
+            id_subs = cur.fetchall() # id тех, на кого юзер подписан
+            if not id_subs: return 0
+            all_subs = []
+            for i in id_subs:
+                cur.execute("SELECT name, avatar from users WHERE ROWID = ?", (i[0],))
+                all_subs.insert(0, [i[0], cur.fetchone()])
+            return all_subs
+     
