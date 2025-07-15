@@ -1,5 +1,5 @@
 import sqlite3 as sq
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import os 
@@ -65,3 +65,51 @@ async def get_profile(request: Request, id: int):
                                                      "path_profile": path_profile, "rowid_profile": rowid_profile,
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
                                                      "posts": posts, "likes": likes, "sub": sub, "followers": followers})
+
+# проверка расширения
+def allowed_file(filename):
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@profiles_router.post("/upload_avatar")
+async def upload_avatar(request: Request, avatar: UploadFile = File(...)):
+    user_data = request.session['user_data']
+
+    if not user_data:
+        return RedirectResponse(url="/", status_code=303)
+    
+    rowid = str(user_data['rowid'])
+    
+
+    #### ничего не отправил
+    if avatar.filename == '':
+        return RedirectResponse(url=f"/{rowid}", status_code=303)
+
+    #### проверка на расширение
+    MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
+    if allowed_file(avatar.filename):
+        contents = await avatar.read()
+
+        #### если больше допустимого размера
+        if len(contents) > MAX_FILE_SIZE:
+            return RedirectResponse(url=f"/{rowid}", status_code=303)
+
+        #### успешно, сохраняем аватарку
+        filename = f"{rowid}{(os.path.splitext(avatar.filename)[1])}"
+        path = f"{os.path.dirname(os.getcwd())}/static/assets/images/avatars"
+        save_path = os.path.join(path, filename)
+        with open(save_path, "wb") as f:
+            f.write(contents)
+
+        #### меняем аватар в сети        
+        new_avatar_path = os.path.join('/static/assets/images/avatars', filename)
+        user_data['path'] = new_avatar_path
+        with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            cur.execute("UPDATE users SET avatar = (?) WHERE ROWID = (?)", (new_avatar_path, user_data['rowid']))
+
+        print(f"Пользователь {user_data['login']} успешно сменил аватарку")
+        return RedirectResponse(url=f"/{rowid}", status_code=303)
+    else:
+        return RedirectResponse(url=f"/{rowid}", status_code=303)
