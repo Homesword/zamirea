@@ -6,7 +6,7 @@ import secrets
 import os
 import sqlite3 as sq
 import bcrypt
-
+from get_methods import *
 
 router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
@@ -20,8 +20,15 @@ async def index(request: Request):
     if not(user_logged):
         return RedirectResponse(url="/login")
     user_data = request.session['user_data']
+
+    #### правый блок
+    int_rowid = int(user_data['rowid'])
+    other_chats = get_other_chats(int_rowid)
+    other_subscribers = get_subscribers(int_rowid)
+
     return templates.TemplateResponse("index.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
-                                                     "path": user_data['path'], "rowid": user_data['rowid']})
+                                                     "path": user_data['path'], "rowid": user_data['rowid'],
+                                                     "other_chats": other_chats, "other_subscribers": other_subscribers})
 
 
 @router.get('/login')
@@ -98,14 +105,16 @@ async def register(request: Request):
     
     # запись нового пользователя в БД
     hashed_password = hash_password(pass1) 
-    cur.execute(f"INSERT INTO users (name, login, password) VALUES (?, ?, ?)", (name, login.lower(), hashed_password))
+    cur.execute("INSERT INTO users (name, login, password) VALUES (?, ?, ?)", (name, login.lower(), hashed_password))
+    rowid = cur.lastrowid
+    cur.execute("INSERT INTO media (posts, sub, likes, followers) VALUES (0, 0, 0, 0)")
     con.commit()
     request.session["user_logged"] = True
     request.session["user_data"] = {
         'name': name,
         'login': login.lower(),
         'path': "/static/assets/images/my-profile.jpg",
-        'rowid': f"{cur.lastrowid}"
+        'rowid': rowid
     }
     return RedirectResponse(url=f"/messages", status_code=303) 
 

@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.backends import default_backend
 import base64
-
+from get_methods import * 
 
 chat_router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
@@ -49,10 +49,11 @@ async def messages(request: Request, id: str):
         messages_in_chat = now_sender + recipient
         messages_sorted = sorted(messages_in_chat, key=lambda msg: datetime.strptime(msg[3], "%Y.%m.%d %H:%M:%S"))
 
-        ############ ДРУГИЕ ЧАТЫ
+        ############ ПРАВЫЙ БЛОК
         int_rowid = int(rowid)
         other_chats = get_other_chats(int_rowid)
         other_subscribers = get_subscribers(int_rowid)
+
         return templates.TemplateResponse("messages.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                     "path": user_data['path'], "rowid": int(user_data['rowid']), "not_key": not_key, 
                                                     "id_recipient": id, "recipient_value": recipient_value, 
@@ -217,36 +218,3 @@ def get_message(rowid, id):
             return [1, "", "", ""]
             
 
-def get_other_chats(id: int):
-     with sq.connect(db_path) as con:
-            cur = con.cursor()
-            cur.execute(f"""SELECT DISTINCT 
-            CASE WHEN id_sender < receiver_id THEN id_sender ELSE receiver_id END AS user1,
-            CASE WHEN id_sender > receiver_id THEN id_sender ELSE receiver_id END AS user2
-            FROM messages
-            WHERE id_sender = ? OR receiver_id = ?;""", (id, id))
-            all_id = cur.fetchall() 
-            list_infos = []
-            # итоговый список с id и данными юзера
-            for i in all_id:
-                if i[0] == id:
-                    cur.execute("SELECT name, avatar from users WHERE rowid = ?", (i[1],))
-                    list_infos.insert(0, [i[1], cur.fetchone()])
-                else:
-                    cur.execute("SELECT name, avatar from users WHERE rowid = ?", (i[0],))
-                    list_infos.insert(0, [i[0], cur.fetchone()])
-            
-            return list_infos
-    
-def get_subscribers(id: int):
-     with sq.connect(db_path) as con:
-            cur = con.cursor()
-            cur.execute("SELECT author from subscribers WHERE subscriber = ?", (id,))
-            id_subs = cur.fetchall() # id тех, на кого юзер подписан
-            if not id_subs: return 0
-            all_subs = []
-            for i in id_subs:
-                cur.execute("SELECT name, avatar from users WHERE ROWID = ?", (i[0],))
-                all_subs.insert(0, [i[0], cur.fetchone()])
-            return all_subs
-     
