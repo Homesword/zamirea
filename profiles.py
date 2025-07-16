@@ -5,6 +5,7 @@ from pathlib import Path
 import os 
 from fastapi.responses import RedirectResponse
 from get_methods import * 
+from datetime import datetime
 
 profiles_router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
@@ -13,7 +14,7 @@ db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
 
 @profiles_router.get("/{id}")
 async def get_profile(request: Request, id: int):
-    #### вошёл ли юзер
+    #### вошёл ли пользователь
     if not(request.session.get("user_logged")):
         return RedirectResponse(url="/")
 
@@ -58,13 +59,19 @@ async def get_profile(request: Request, id: int):
             posts, likes = media_data[0], media_data[1]
             sub, followers = media_data[2], media_data[3]
 
-    
+            #### посты и понравившиеся
+            cur.execute("SELECT * FROM posts WHERE who = (?)", (id,))
+            user_posts = cur.fetchall()
+            cur.execute("SELECT * FROM favorites WHERE who = (?)", (id,))
+            user_likes = cur.fetchall()
+
     return templates.TemplateResponse("profiles.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
                                                      "name_profile": name_profile, "login_profile": login_profile,
                                                      "path_profile": path_profile, "rowid_profile": rowid_profile,
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
-                                                     "posts": posts, "likes": likes, "sub": sub, "followers": followers})
+                                                     "posts": posts, "likes": likes, "sub": sub, "followers": followers,
+                                                     "user_posts": user_posts, "user_likes": user_likes})
 
 # проверка расширения
 def allowed_file(filename):
@@ -72,6 +79,7 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# выгрузка аватара
 @profiles_router.post("/upload_avatar")
 async def upload_avatar(request: Request, avatar: UploadFile = File(...)):
     user_data = request.session['user_data']
@@ -113,3 +121,14 @@ async def upload_avatar(request: Request, avatar: UploadFile = File(...)):
         return RedirectResponse(url=f"/{rowid}", status_code=303)
     else:
         return RedirectResponse(url=f"/{rowid}", status_code=303)
+    
+# создание нового поста
+@profiles_router.post("/new-post")
+async def upload_avatar(request: Request, text_post: str = Form(...)): 
+    with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            rowid = request.session['user_data']['rowid']
+            date = datetime.now()
+            cur.execute("INSERT INTO posts (who, timestamp, text, likes) VALUES (?, ?, ?, ?)", (rowid, date.strftime("%Y.%m.%d %H:%M:%S"), text_post, 0))
+            con.commit()
+    return RedirectResponse(url=f"/{rowid}", status_code=303)

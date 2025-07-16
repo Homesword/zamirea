@@ -40,7 +40,7 @@ async def messages(request: Request, id: str):
     try:
         rowid = request.session['user_data']['rowid']
         # проверка, чтобы не писал сам себе
-        if rowid == id:
+        if rowid == int(id):
             return RedirectResponse(url="/", status_code=303) 
         user_data = request.session['user_data']
         not_key, now_sender, recipient, recipient_value = get_message(rowid=rowid, id=id)
