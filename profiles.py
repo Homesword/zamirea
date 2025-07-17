@@ -132,3 +132,37 @@ async def upload_avatar(request: Request, text_post: str = Form(...)):
             cur.execute("INSERT INTO posts (who, timestamp, text, likes) VALUES (?, ?, ?, ?)", (rowid, date.strftime("%Y.%m.%d %H:%M:%S"), text_post, 0))
             con.commit()
     return RedirectResponse(url=f"/{rowid}", status_code=303)
+
+# редактирование поста
+@profiles_router.post("/edit-post")
+async def edit_post(request: Request,  post_id: int = Form(...), edited_text: str = Form(...)):
+    rowid = request.session['user_data']['rowid']
+    with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            # получаем ROWID поста, который нужно отредактировать
+            cur.execute("SELECT ROWID FROM posts WHERE who = (?) ORDER BY ROWID DESC LIMIT 1 OFFSET (?)",
+        (rowid, post_id-1))
+            rowid_post = cur.fetchone()[0]    
+            date = datetime.now()
+            # редактируем пост
+            cur.execute("UPDATE posts SET timestamp = ?, text = ? WHERE ROWID = ?",
+                (date.strftime("%Y.%m.%d %H:%M:%S"), edited_text, rowid_post))
+            con.commit()
+
+    return RedirectResponse(url=f"/{rowid}", status_code=303) 
+
+@profiles_router.post("/delete-post")
+async def delete_post(request: Request, post_id: int = Form(...)): 
+     rowid = request.session['user_data']['rowid']
+     with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            # получаем ROWID поста, который нужно удалить
+            cur.execute("SELECT ROWID FROM posts WHERE who = (?) ORDER BY ROWID DESC LIMIT 1 OFFSET (?)",
+        (rowid, post_id-1))
+            rowid_post = cur.fetchone()[0]   
+            # удаляем пост
+            cur.execute("DELETE FROM posts WHERE ROWID = ?", (rowid_post,))
+            con.commit()
+     return RedirectResponse(url=f"/{rowid}", status_code=303) 
+
+    
