@@ -56,14 +56,35 @@ async def get_profile(request: Request, id: int):
             cur = con.cursor() 
             cur.execute("SELECT * FROM media WHERE ROWID = (?) LIMIT 1", (id,))
             media_data = cur.fetchone()
-            posts, likes = media_data[0], media_data[1]
-            sub, followers = media_data[2], media_data[3]
-
+            posts, sub = media_data[0], media_data[1]
+            likes, followers = media_data[2], media_data[3]
             #### посты и понравившиеся
             cur.execute("SELECT * FROM posts WHERE who = (?)", (id,))
             user_posts = cur.fetchall()
             cur.execute("SELECT * FROM favorites WHERE who = (?)", (id,))
             user_likes = cur.fetchall()
+
+    #### подписки
+    with sq.connect(db_path) as con:
+        cur = con.cursor()
+        cur.execute("""
+            SELECT 
+                u.name, u.login, u.avatar,
+                m.sub, m.followers,
+                s.author
+            FROM subscribers s
+            JOIN users u ON u.ROWID = s.author
+            JOIN media m ON m.ROWID = s.author
+            WHERE s.subscriber = ?
+        """, (id,))
+        sub_block = cur.fetchall()
+    print(sub_block)
+
+
+
+
+
+
 
     return templates.TemplateResponse("profiles.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
@@ -71,7 +92,7 @@ async def get_profile(request: Request, id: int):
                                                      "path_profile": path_profile, "rowid_profile": rowid_profile,
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
                                                      "posts": posts, "likes": likes, "sub": sub, "followers": followers,
-                                                     "user_posts": user_posts, "user_likes": user_likes})
+                                                     "user_posts": user_posts, "user_likes": user_likes, "sub_block": sub_block})
 
 # проверка расширения
 def allowed_file(filename):
@@ -130,6 +151,7 @@ async def upload_avatar(request: Request, text_post: str = Form(...)):
             rowid = request.session['user_data']['rowid']
             date = datetime.now()
             cur.execute("INSERT INTO posts (who, timestamp, text, likes) VALUES (?, ?, ?, ?)", (rowid, date.strftime("%Y.%m.%d %H:%M:%S"), text_post, 0))
+            cur.execute("UPDATE media SET posts = posts + 1 WHERE ROWID = ?", (rowid,))
             con.commit()
     return RedirectResponse(url=f"/{rowid}", status_code=303)
 
@@ -162,6 +184,7 @@ async def delete_post(request: Request, post_id: int = Form(...)):
             rowid_post = cur.fetchone()[0]   
             # удаляем пост
             cur.execute("DELETE FROM posts WHERE ROWID = ?", (rowid_post,))
+            cur.execute("UPDATE media SET posts = posts - 1 WHERE ROWID = ?", (rowid,))
             con.commit()
      return RedirectResponse(url=f"/{rowid}", status_code=303) 
 
