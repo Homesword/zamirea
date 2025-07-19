@@ -6,6 +6,8 @@ import os
 from fastapi.responses import RedirectResponse
 from get_methods import * 
 from datetime import datetime
+import hashlib
+
 
 profiles_router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
@@ -31,7 +33,7 @@ async def get_profile(request: Request, id: int):
     user_data = request.session['user_data']
     int_rowid = int(user_data['rowid'])
 
-    # если юзер просматривает свой профиль
+    #### если юзер просматривает свой профиль
     if id == int_rowid: 
         name_profile = user_data['name']
         login_profile = user_data['login']
@@ -61,7 +63,12 @@ async def get_profile(request: Request, id: int):
             #### посты и понравившиеся
             cur.execute("SELECT * FROM posts WHERE who = (?)", (id,))
             user_posts = cur.fetchall()
-            cur.execute("SELECT * FROM favorites WHERE who = (?)", (id,))
+            cur.execute("""SELECT posts.who, posts.timestamp, posts.text, posts.likes,
+                            users.name, users.login, users.avatar
+                            FROM like
+                            JOIN posts ON posts.post_id = like.whom
+                            JOIN users ON users.ROWID = posts.who
+                            WHERE like.who = ?""", (id,))
             user_likes = cur.fetchall()
 
     #### подписки
@@ -78,13 +85,6 @@ async def get_profile(request: Request, id: int):
             WHERE s.subscriber = ?
         """, (id,))
         sub_block = cur.fetchall()
-    print(sub_block)
-
-
-
-
-
-
 
     return templates.TemplateResponse("profiles.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
@@ -110,7 +110,6 @@ async def upload_avatar(request: Request, avatar: UploadFile = File(...)):
     
     rowid = str(user_data['rowid'])
     
-
     #### ничего не отправил
     if avatar.filename == '':
         return RedirectResponse(url=f"/{rowid}", status_code=303)
@@ -149,8 +148,9 @@ async def upload_avatar(request: Request, text_post: str = Form(...)):
     with sq.connect(db_path) as con:
             cur = con.cursor() 
             rowid = request.session['user_data']['rowid']
-            date = datetime.now()
-            cur.execute("INSERT INTO posts (who, timestamp, text, likes) VALUES (?, ?, ?, ?)", (rowid, date.strftime("%Y.%m.%d %H:%M:%S"), text_post, 0))
+            date = (datetime.now()).strftime("%Y.%m.%d %H:%M:%S")
+            post_id = generate_post_id(rowid, date, text_post)
+            cur.execute("INSERT INTO posts (who, timestamp, text, likes, post_id) VALUES (?, ?, ?, ?, ?)", (rowid, date, text_post, 0, post_id))
             cur.execute("UPDATE media SET posts = posts + 1 WHERE ROWID = ?", (rowid,))
             con.commit()
     return RedirectResponse(url=f"/{rowid}", status_code=303)
@@ -161,31 +161,36 @@ async def edit_post(request: Request,  post_id: int = Form(...), edited_text: st
     rowid = request.session['user_data']['rowid']
     with sq.connect(db_path) as con:
             cur = con.cursor() 
-            # получаем ROWID поста, который нужно отредактировать
+            #### получаем ROWID поста, который нужно отредактировать
             cur.execute("SELECT ROWID FROM posts WHERE who = (?) ORDER BY ROWID DESC LIMIT 1 OFFSET (?)",
         (rowid, post_id-1))
             rowid_post = cur.fetchone()[0]    
-            date = datetime.now()
-            # редактируем пост
-            cur.execute("UPDATE posts SET timestamp = ?, text = ? WHERE ROWID = ?",
-                (date.strftime("%Y.%m.%d %H:%M:%S"), edited_text, rowid_post))
+            date = (datetime.now()).strftime("%Y.%m.%d %H:%M:%S")
+            post_id = generate_post_id(rowid, date, edited_text)
+            #### редактируем пост
+            cur.execute("UPDATE posts SET timestamp = ?, text = ?, post_id = ? WHERE ROWID = ?",
+                (date, edited_text, post_id, rowid_post))
             con.commit()
 
     return RedirectResponse(url=f"/{rowid}", status_code=303) 
 
+# удаление поста
 @profiles_router.post("/delete-post")
 async def delete_post(request: Request, post_id: int = Form(...)): 
      rowid = request.session['user_data']['rowid']
      with sq.connect(db_path) as con:
             cur = con.cursor() 
-            # получаем ROWID поста, который нужно удалить
+            #### получаем ROWID поста, который нужно удалить
             cur.execute("SELECT ROWID FROM posts WHERE who = (?) ORDER BY ROWID DESC LIMIT 1 OFFSET (?)",
         (rowid, post_id-1))
             rowid_post = cur.fetchone()[0]   
-            # удаляем пост
+            #### удаляем пост
             cur.execute("DELETE FROM posts WHERE ROWID = ?", (rowid_post,))
             cur.execute("UPDATE media SET posts = posts - 1 WHERE ROWID = ?", (rowid,))
             con.commit()
      return RedirectResponse(url=f"/{rowid}", status_code=303) 
 
-    
+# генерация post_id
+def generate_post_id(who: str, timestamp: str, text: str) -> str:
+    base = f"{who}|{timestamp}|{text}"
+    return hashlib.sha256(base.encode('utf-8')).hexdigest()
