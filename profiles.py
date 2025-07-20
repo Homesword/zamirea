@@ -3,11 +3,10 @@ from fastapi import APIRouter, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import os 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from get_methods import * 
 from datetime import datetime
 import hashlib
-
 
 profiles_router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
@@ -60,16 +59,47 @@ async def get_profile(request: Request, id: int):
             media_data = cur.fetchone()
             posts, sub = media_data[0], media_data[1]
             likes, followers = media_data[2], media_data[3]
-            #### посты и понравившиеся
-            cur.execute("SELECT * FROM posts WHERE who = (?)", (id,))
-            user_posts = cur.fetchall()
-            cur.execute("""SELECT posts.who, posts.timestamp, posts.text, posts.likes,
-                            users.name, users.login, users.avatar
-                            FROM like
-                            JOIN posts ON posts.post_id = like.whom
-                            JOIN users ON users.ROWID = posts.who
-                            WHERE like.who = ?""", (id,))
-            user_likes = cur.fetchall()
+            #### посты 
+            cur.execute("SELECT * FROM posts WHERE who = ?", (id,))
+            user_posts_raw = cur.fetchall()
+
+            cur.execute("SELECT whom FROM like WHERE who = ?", (int_rowid,))
+            liked_post_id = set(row[0] for row in cur.fetchall())
+
+            user_posts = []
+            for post in user_posts_raw:
+                post_dict = {
+                    "who": post[0],
+                    "timestamp": post[1],
+                    "text": post[2],
+                    "likes": post[3],
+                    "post_id": post[4],
+                    "liked_by_viewer": post[4] in liked_post_id
+                }
+                user_posts.append(post_dict)
+
+            #### понравившиеся
+            cur.execute("""SELECT p.who, p.timestamp, p.text, p.likes, p.post_id,
+                            u.name, u.login, u.avatar, CASE WHEN l2.whom IS 
+                            NOT NULL THEN 1 ELSE 0 END AS liked_by_viewer
+                            FROM like l1 JOIN posts p ON p.post_id = l1.whom
+                            JOIN users u ON u.ROWID = p.who LEFT JOIN 
+                            like l2 ON l2.whom = p.post_id AND l2.who = ?
+                            WHERE l1.who = ?""", (int_rowid, id))
+            user_likes = [
+                {
+                    "who": row[0],
+                    "timestamp": row[1],
+                    "text": row[2],
+                    "likes": row[3],
+                    "post_id": row[4],
+                    "name": row[5],
+                    "login": row[6],
+                    "avatar": row[7],
+                    "liked_by_viewer": bool(row[8])
+                }
+                for row in cur.fetchall()
+            ]
 
     #### подписки
     with sq.connect(db_path) as con:
@@ -86,6 +116,7 @@ async def get_profile(request: Request, id: int):
         """, (id,))
         sub_block = cur.fetchall()
 
+    print(user_likes)
     return templates.TemplateResponse("profiles.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
                                                      "name_profile": name_profile, "login_profile": login_profile,
@@ -93,12 +124,6 @@ async def get_profile(request: Request, id: int):
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
                                                      "posts": posts, "likes": likes, "sub": sub, "followers": followers,
                                                      "user_posts": user_posts, "user_likes": user_likes, "sub_block": sub_block})
-
-# проверка расширения
-def allowed_file(filename):
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # выгрузка аватара
 @profiles_router.post("/upload_avatar")
@@ -157,40 +182,68 @@ async def upload_avatar(request: Request, text_post: str = Form(...)):
 
 # редактирование поста
 @profiles_router.post("/edit-post")
-async def edit_post(request: Request,  post_id: int = Form(...), edited_text: str = Form(...)):
+async def edit_post(request: Request,  post_id: str = Form(...), edited_text: str = Form(...)):
     rowid = request.session['user_data']['rowid']
     with sq.connect(db_path) as con:
             cur = con.cursor() 
-            #### получаем ROWID поста, который нужно отредактировать
-            cur.execute("SELECT ROWID FROM posts WHERE who = (?) ORDER BY ROWID DESC LIMIT 1 OFFSET (?)",
-        (rowid, post_id-1))
-            rowid_post = cur.fetchone()[0]    
             date = (datetime.now()).strftime("%Y.%m.%d %H:%M:%S")
-            post_id = generate_post_id(rowid, date, edited_text)
+            new_post_id = generate_post_id(rowid, date, edited_text)
             #### редактируем пост
-            cur.execute("UPDATE posts SET timestamp = ?, text = ?, post_id = ? WHERE ROWID = ?",
-                (date, edited_text, post_id, rowid_post))
+            cur.execute("UPDATE posts SET timestamp = ?, text = ?, post_id = ? WHERE post_id = ?",
+                (date, edited_text, new_post_id, post_id))
             con.commit()
 
     return RedirectResponse(url=f"/{rowid}", status_code=303) 
 
 # удаление поста
 @profiles_router.post("/delete-post")
-async def delete_post(request: Request, post_id: int = Form(...)): 
+async def delete_post(request: Request, post_id: str = Form(...)): 
      rowid = request.session['user_data']['rowid']
      with sq.connect(db_path) as con:
-            cur = con.cursor() 
-            #### получаем ROWID поста, который нужно удалить
-            cur.execute("SELECT ROWID FROM posts WHERE who = (?) ORDER BY ROWID DESC LIMIT 1 OFFSET (?)",
-        (rowid, post_id-1))
-            rowid_post = cur.fetchone()[0]   
+            cur = con.cursor()   
             #### удаляем пост
-            cur.execute("DELETE FROM posts WHERE ROWID = ?", (rowid_post,))
+            cur.execute("DELETE FROM posts WHERE post_id = ?", (post_id,))
             cur.execute("UPDATE media SET posts = posts - 1 WHERE ROWID = ?", (rowid,))
             con.commit()
      return RedirectResponse(url=f"/{rowid}", status_code=303) 
+
+# лайк поста
+@profiles_router.post('/like-post')
+async def like_post(request: Request, post_id: str = Form(...)): 
+    rowid = request.session['user_data']['rowid']
+    with sq.connect(db_path) as con:
+            cur = con.cursor()
+            cur.execute("SELECT 1 FROM like WHERE who = ? AND whom = ? LIMIT 1", (rowid, post_id))
+            test_like = cur.fetchone()
+            #### если пользователь не лайкал пост
+            if not(test_like):
+                cur.execute("UPDATE media SET likes = likes + 1 WHERE ROWID = ?", (rowid,))
+                cur.execute("UPDATE posts SET likes = likes + 1 WHERE post_id = ?", (post_id,))
+                cur.execute("INSERT INTO like (who, whom) VALUES (?, ?)", (rowid, post_id))
+                liked = True
+            #### если уже лайкал
+            else:      
+                cur.execute("SELECT who FROM posts WHERE post_id = ? LIMIT 1", (post_id,))
+                id_user = cur.fetchone()[0]
+                print(id_user, post_id)
+                cur.execute("UPDATE media SET likes = likes - 1 WHERE ROWID = ?", (rowid,))
+                cur.execute("UPDATE posts SET likes = likes - 1 WHERE post_id = ?", (post_id,))
+                cur.execute("DELETE FROM like WHERE who = ? AND whom = ?", (rowid, post_id))
+                liked = False
+            #### обновлённое количество лайков
+            cur.execute("SELECT likes FROM posts WHERE post_id = ?", (post_id,))
+            likes = cur.fetchone()[0]
+            con.commit()
+            print(likes, post_id )
+    return JSONResponse({"liked": liked, "likes": likes})
 
 # генерация post_id
 def generate_post_id(who: str, timestamp: str, text: str) -> str:
     base = f"{who}|{timestamp}|{text}"
     return hashlib.sha256(base.encode('utf-8')).hexdigest()
+
+# проверка расширения
+def allowed_file(filename):
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
