@@ -6,11 +6,12 @@ from profiles import profiles_router
 from friends import sub_router
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-
+from dotenv import load_dotenv
+import os 
 
 app = FastAPI()
-with open("secret_key.txt", 'r', encoding = 'utf-8') as file:
-    secret_key = file.read()  
+load_dotenv()
+secret_key = os.getenv("SECRET_KEY")
 
 app.add_middleware(
     SessionMiddleware,
