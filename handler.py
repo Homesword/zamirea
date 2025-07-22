@@ -2,11 +2,11 @@ from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from fastapi.responses import RedirectResponse
-import secrets
 import os
 import sqlite3 as sq
 import bcrypt
 from get_methods import *
+
 
 router = APIRouter()
 path_templates = Path(__file__).resolve().parent.parent / "templates"
@@ -128,10 +128,6 @@ async def privacy(request: Request):
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/", status_code=303) 
-
-
-def generate_csrf_token():
-    return secrets.token_urlsafe(32)
 
 
 def hash_password(password):

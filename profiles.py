@@ -101,33 +101,37 @@ async def get_profile(request: Request, id: int):
                 for row in cur.fetchall()
             ]
 
-    #### подписки
-    with sq.connect(db_path) as con:
-        cur = con.cursor()
-        cur.execute("""
-            SELECT 
-                u.name, u.login, u.avatar,
-                m.sub, m.followers,
-                s.author
-            FROM subscribers s
-            JOIN users u ON u.ROWID = s.author
-            JOIN media m ON m.ROWID = s.author
-            WHERE s.subscriber = ?
-        """, (id,))
-        sub_block = cur.fetchall()
+            #### подписки
+            cur.execute("""
+                SELECT 
+                    u.name, u.login, u.avatar,
+                    m.sub, m.followers,
+                    s.author
+                FROM subscribers s
+                JOIN users u ON u.ROWID = s.author
+                JOIN media m ON m.ROWID = s.author
+                WHERE s.subscriber = ?
+            """, (id,))
+            sub_block = cur.fetchall()
 
-    print(user_likes)
+    csrf_token = generate_csrf_token()
+    request.session["csrf_token"] = csrf_token
+
     return templates.TemplateResponse("profiles.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
                                                      "name_profile": name_profile, "login_profile": login_profile,
                                                      "path_profile": path_profile, "rowid_profile": rowid_profile,
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
                                                      "posts": posts, "likes": likes, "sub": sub, "followers": followers,
-                                                     "user_posts": user_posts, "user_likes": user_likes, "sub_block": sub_block})
+                                                     "user_posts": user_posts, "user_likes": user_likes, "sub_block": sub_block,
+                                                     "csrf_token": csrf_token})
 
 # выгрузка аватара
 @profiles_router.post("/upload_avatar")
-async def upload_avatar(request: Request, avatar: UploadFile = File(...)):
+async def upload_avatar(request: Request, avatar: UploadFile = File(...), csrf_token: str = Form(...)):
+    if request.session["csrf_token"] != csrf_token: 
+        return RedirectResponse(url="/", status_code=303)
+    
     user_data = request.session['user_data']
 
     if not user_data:
@@ -169,7 +173,10 @@ async def upload_avatar(request: Request, avatar: UploadFile = File(...)):
     
 # создание нового поста
 @profiles_router.post("/new-post")
-async def upload_avatar(request: Request, text_post: str = Form(...)): 
+async def upload_avatar(request: Request, text_post: str = Form(...), csrf_token: str = Form(...)): 
+    if request.session["csrf_token"] != csrf_token: 
+        return RedirectResponse(url="/", status_code=303)
+    
     with sq.connect(db_path) as con:
             cur = con.cursor() 
             rowid = request.session['user_data']['rowid']
@@ -182,23 +189,30 @@ async def upload_avatar(request: Request, text_post: str = Form(...)):
 
 # редактирование поста
 @profiles_router.post("/edit-post")
-async def edit_post(request: Request,  post_id: str = Form(...), edited_text: str = Form(...)):
+async def edit_post(request: Request,  post_id: str = Form(...), edited_text: str = Form(...), csrf_token: str = Form(...)):
+    if request.session["csrf_token"] != csrf_token: 
+        return RedirectResponse(url="/", status_code=303)
+    
     rowid = request.session['user_data']['rowid']
+
     with sq.connect(db_path) as con:
             cur = con.cursor() 
             date = (datetime.now()).strftime("%Y.%m.%d %H:%M:%S")
-            new_post_id = generate_post_id(rowid, date, edited_text)
             #### редактируем пост
             cur.execute("UPDATE posts SET timestamp = ?, text = ?, post_id = ? WHERE post_id = ?",
-                (date, edited_text, new_post_id, post_id))
+                (date, edited_text, post_id, post_id))
             con.commit()
 
     return RedirectResponse(url=f"/{rowid}", status_code=303) 
 
 # удаление поста
 @profiles_router.post("/delete-post")
-async def delete_post(request: Request, post_id: str = Form(...)): 
+async def delete_post(request: Request, post_id: str = Form(...), csrf_token: str = Form(...)): 
+     if request.session["csrf_token"] != csrf_token: 
+        return RedirectResponse(url="/", status_code=303)
+     
      rowid = request.session['user_data']['rowid']
+
      with sq.connect(db_path) as con:
             cur = con.cursor()   
             #### удаляем пост
@@ -209,8 +223,12 @@ async def delete_post(request: Request, post_id: str = Form(...)):
 
 # лайк поста
 @profiles_router.post('/like-post')
-async def like_post(request: Request, post_id: str = Form(...)): 
+async def like_post(request: Request, post_id: str = Form(...), csrf_token: str = Form(...)): 
+    if request.session["csrf_token"] != csrf_token: 
+        return RedirectResponse(url="/", status_code=303)
+    
     rowid = request.session['user_data']['rowid']
+
     with sq.connect(db_path) as con:
             cur = con.cursor()
             cur.execute("SELECT 1 FROM like WHERE who = ? AND whom = ? LIMIT 1", (rowid, post_id))
@@ -223,9 +241,6 @@ async def like_post(request: Request, post_id: str = Form(...)):
                 liked = True
             #### если уже лайкал
             else:      
-                cur.execute("SELECT who FROM posts WHERE post_id = ? LIMIT 1", (post_id,))
-                id_user = cur.fetchone()[0]
-                print(id_user, post_id)
                 cur.execute("UPDATE media SET likes = likes - 1 WHERE ROWID = ?", (rowid,))
                 cur.execute("UPDATE posts SET likes = likes - 1 WHERE post_id = ?", (post_id,))
                 cur.execute("DELETE FROM like WHERE who = ? AND whom = ?", (rowid, post_id))
@@ -234,13 +249,16 @@ async def like_post(request: Request, post_id: str = Form(...)):
             cur.execute("SELECT likes FROM posts WHERE post_id = ?", (post_id,))
             likes = cur.fetchone()[0]
             con.commit()
-            print(likes, post_id )
     return JSONResponse({"liked": liked, "likes": likes})
 
 # подписка
 @profiles_router.post('/add-friend')
-async def sub_user(request: Request, user_id: int = Form(...)):
+async def sub_user(request: Request, user_id: int = Form(...), csrf_token: str = Form(...)):
+    if request.session["csrf_token"] != csrf_token: 
+        return RedirectResponse(url="/", status_code=303)
+    
     rowid = request.session['user_data']['rowid']
+
     with sq.connect(db_path) as con:
         cur = con.cursor()
         cur.execute("SELECT 1 FROM subscribers WHERE subscriber = ? AND author = ?", (rowid, user_id))

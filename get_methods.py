@@ -1,5 +1,6 @@
 import os
 import sqlite3 as sq
+import secrets
 
 db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db") 
 
@@ -35,4 +36,6 @@ def get_subscribers(id: int):
                 cur.execute("SELECT name, avatar from users WHERE ROWID = ?", (i[0],))
                 all_subs.insert(0, [i[0], cur.fetchone()])
             return all_subs
-     
+
+def generate_csrf_token():
+    return secrets.token_urlsafe(32)
