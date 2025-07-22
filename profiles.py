@@ -237,6 +237,27 @@ async def like_post(request: Request, post_id: str = Form(...)):
             print(likes, post_id )
     return JSONResponse({"liked": liked, "likes": likes})
 
+# подписка
+@profiles_router.post('/add-friend')
+async def sub_user(request: Request, user_id: int = Form(...)):
+    rowid = request.session['user_data']['rowid']
+    with sq.connect(db_path) as con:
+        cur = con.cursor()
+        cur.execute("SELECT 1 FROM subscribers WHERE subscriber = ? AND author = ?", (rowid, user_id))
+        test_sub = cur.fetchone()
+        if not(test_sub):
+            cur.execute("INSERT INTO subscribers (subscriber, author) VALUES (?, ?)", (rowid, user_id))
+            cur.execute("UPDATE media SET followers = followers + 1 WHERE ROWID = ?", (user_id,))
+            cur.execute("UPDATE media SET sub = sub + 1 WHERE ROWID = ?", (rowid,))
+            status_sub = True 
+        else: 
+            cur.execute("DELETE FROM subscribers WHERE subscriber = ? AND author = ?", (rowid, user_id))
+            cur.execute("UPDATE media SET followers = followers - 1 WHERE ROWID = ?", (user_id,))
+            cur.execute("UPDATE media SET sub = sub - 1 WHERE ROWID = ?", (rowid,))
+            status_sub = False 
+        
+    return JSONResponse(content={"status_sub": status_sub})
+
 # генерация post_id
 def generate_post_id(who: str, timestamp: str, text: str) -> str:
     base = f"{who}|{timestamp}|{text}"
