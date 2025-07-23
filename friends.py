@@ -26,13 +26,38 @@ async def test_friends(request: Request):
     other_chats = get_other_chats(int_rowid)
     other_subscribers = get_subscribers(int_rowid)
 
-    #### счётчик подписчиков и подписок
     with sq.connect(db_path) as con:
         cur = con.cursor()
-        cur.execute("SELECT sub, followers FROM media WHERE ROWID = ?", (int(user_data['rowid']),))
+        #### счётчик подписчиков и подписок
+        cur.execute("SELECT sub, followers FROM media WHERE ROWID = ?", (int_rowid,))
         score_sub, score_followers = cur.fetchone()
+
+        #### подписки
+        cur.execute("""
+            SELECT 
+                u.name, u.login, u.avatar,
+                m.sub, m.followers,
+                s.author
+            FROM subscribers s
+            JOIN users u ON u.ROWID = s.author
+            JOIN media m ON m.ROWID = s.author
+            WHERE s.subscriber = ?
+        """, (int_rowid,))
+        sub_block = cur.fetchall()
+
+        #### подписчики
+        cur.execute("""
+        SELECT u.name, u.login, u.avatar, m.sub, m.followers, u.ROWID
+        FROM subscribers s
+        JOIN users u ON u.ROWID = s.subscriber
+        JOIN media m ON m.ROWID = s.subscriber
+        WHERE s.author = ?
+        """, (int_rowid,))
+
+        followers_block = cur.fetchall()
 
     return templates.TemplateResponse("friends.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
-                                                     "score_sub": score_sub, "score_followers": score_followers})
+                                                     "score_sub": score_sub, "score_followers": score_followers,
+                                                     "sub_block": sub_block, "followers_block": followers_block})

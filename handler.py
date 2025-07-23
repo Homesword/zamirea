@@ -25,11 +25,23 @@ async def index(request: Request):
     int_rowid = int(user_data['rowid'])
     other_chats = get_other_chats(int_rowid)
     other_subscribers = get_subscribers(int_rowid)
+    with sq.connect(db_path) as con:
+        cur = con.cursor() 
+        #### информация о пользователе
+        cur.execute("""
+        SELECT u.name, u.login, u.avatar, m.sub, m.likes
+        FROM users u
+        JOIN media m ON m.ROWID = u.ROWID
+        WHERE u.ROWID = ?
+        LIMIT 1
+        """, (int_rowid,))
+        name_user, login_user, path_user, score_sub_user, score_like_user = cur.fetchone()
 
     return templates.TemplateResponse("index.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
-                                                     "other_chats": other_chats, "other_subscribers": other_subscribers})
-
+                                                     "other_chats": other_chats, "other_subscribers": other_subscribers,
+                                                     "name_user": name_user, "login_user": login_user, "path_user": path_user,
+                                                     "score_sub_user": score_sub_user, "score_like_user": score_like_user})
 
 @router.get('/login')
 async def login_page(request: Request):
