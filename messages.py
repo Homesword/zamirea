@@ -1,10 +1,10 @@
 import sqlite3 as sq
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from pydantic import BaseModel
 import os 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from datetime import datetime
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -39,35 +39,63 @@ async def messages(request: Request, id: str):
         return RedirectResponse(url="/")
     try:
         rowid = request.session['user_data']['rowid']
-        # проверка, чтобы не писал сам себе
-        if rowid == int(id):
+        if rowid == int(id): # чтобы не писал сам себе
             return RedirectResponse(url="/", status_code=303) 
+        
         user_data = request.session['user_data']
-        not_key, now_sender, recipient, recipient_value = get_message(rowid=rowid, id=id)
 
-        ############ ИТОГОВАЯ ПЕРЕПИСКИ ПО ДАТАМ 
-        messages_in_chat = now_sender + recipient
-        messages_sorted = sorted(messages_in_chat, key=lambda msg: datetime.strptime(msg[3], "%Y.%m.%d %H:%M:%S"))
+        #### есть ли ключи и данные о получателе
+        with sq.connect(db_path) as con:
+            cur = con.cursor()
+            cur.execute("SELECT 1 FROM keys WHERE id = ? LIMIT 1", (rowid,))
+            if not cur.fetchone():
+                not_key = 1
+            else:
+                not_key = 0
+            cur.execute("SELECT * FROM users WHERE ROWID = ? LIMIT 1", (id,))
+            recipient_value = cur.fetchone()
 
-        ############ ПРАВЫЙ БЛОК
+        #### правый блок
         int_rowid = int(rowid)
         other_chats = get_other_chats(int_rowid)
         other_subscribers = get_subscribers(int_rowid)
 
         return templates.TemplateResponse("messages.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
-                                                    "path": user_data['path'], "rowid": int(user_data['rowid']), "not_key": not_key, 
+                                                    "path": user_data['path'].replace('\\', '/').strip(), "rowid": int(user_data['rowid']), "not_key": not_key, 
                                                     "id_recipient": id, "recipient_value": recipient_value, 
-                                                    "messages_sorted": messages_sorted, "other_chats": other_chats,
+                                                    "other_chats": other_chats,
                                                     "other_subscribers": other_subscribers})
     except Exception as e:
         print("Ошибка в переписке:", e)
         raise HTTPException(status_code=500, detail="Ошибка сервера")
-        
+
+
+
+@chat_router.get("/messages/{id}/data")
+async def get_messages_data(request: Request, id: int, page: int = Query(1)):
+    rowid = int(request.session['user_data']['rowid'])
+    result = get_message(rowid, id, page)
+
+    # распаковываем данные
+    status = result[0]
+    messages_raw = result[1]
+    user_info = result[2]
+
+    # преобразуем в список словарей
+    messages = []
+    for msg in messages_raw:
+        sender_id, receiver_id, encrypted_text, timestamp, _ = msg
+        messages.append({
+            "is_my": sender_id == rowid,
+            "text": encrypted_text,
+            "time": timestamp
+        })
+    return JSONResponse(content=messages)
+     
 
 # сохранение публичного ключа пользователя
 @chat_router.post("/save-public-key/{rowid}") 
 def save_public_key(request: PublicKeyRequest, rowid: str):
-    # проверка если чел попробовал сделать пост запрос уже имея себя в БД
     try:
         key_bytes = base64.b64decode(request.public_key)
         public_key = serialization.load_der_public_key(key_bytes)
@@ -95,7 +123,11 @@ def save_public_key(request: PublicKeyRequest, rowid: str):
 def send_message(request: Request, rowid: str, messagerequest: MessageRequest):
     try:
         if rowid == '1':  # админу нельзя отправлять сообщения
-            return RedirectResponse(url="/messages/1", status_code=303)
+            return RedirectResponse(url=f"/messages/{rowid}", status_code=303)
+        #### сообщение для отправки
+        message = messagerequest.text_message.encode()
+        if message.decode().strip() == "": # если пустое сообщение / пробелы и т.п.
+            return RedirectResponse(url=f"/messages/{rowid}", status_code=303)
 
         date = datetime.now()
         with sq.connect(db_path) as con:
@@ -129,8 +161,7 @@ def send_message(request: Request, rowid: str, messagerequest: MessageRequest):
                 backend=default_backend()
             )
 
-            # сообщение для отправки
-            message = messagerequest.text_message.encode()
+            
 
             # Шифруем для получателя
             encode_message1 = base64.b64encode(recipient_public_key.encrypt(
@@ -179,7 +210,7 @@ def send_admin_message(rowid):
         is_admin=True
     )
     
-    # Используем общий механизм отправки
+    # общий механизм отправки
     with sq.connect(db_path) as con:
         cur = con.cursor()
         cur.execute("SELECT 1 FROM keys WHERE id = ?", (rowid,))
@@ -191,30 +222,32 @@ def send_admin_message(rowid):
 
 
 # переписка 
-def get_message(rowid, id):
+def get_message(rowid, id, page):
     with sq.connect(db_path) as con:
-            not_key = 1
-            cur = con.cursor()
-            cur.execute("SELECT key FROM keys WHERE id = ? LIMIT 1", (rowid,))
-            now_sender, recipient, recipient_value = '', '', ''
-            key_sender = cur.fetchone() # если у человека есть ключи
-            if key_sender:
-                ############ ПРОВЕРКА, ЧТО ЧЕЛ КОТОРОМУ МЫ ПИШЕМ СУЩЕСТВУЕТ
-                cur.execute("SELECT key FROM keys WHERE id = ? LIMIT 1", (id,))
-                recipient_key = cur.fetchone()
-                if not(recipient_key):
-                    return RedirectResponse(url="/", status_code=303) 
-                ############ ПЕРЕПИСКА
-                not_key = 0
-                # берём с типом 0, тк мы можем расшифровать только то, что было закодировано нашим публичным ключом.
-                cur.execute("""SELECT * FROM messages WHERE id_sender = ? AND receiver_id = ? AND type = ?""", (rowid, id, 1))
-                now_sender = cur.fetchall() # вся история переписки с точки зрения отправителя 
-                # берём с типом 1, тк мы можем расшифровать только то, что было закодировано нашим публичным ключом.
-                cur.execute(f"""SELECT * FROM messages WHERE id_sender = ? AND receiver_id = ? AND type = ?""", (id, rowid, 0))
-                recipient = cur.fetchall() # вся история переписки с челом с точки зрения получателя
-                cur.execute(f"SELECT * FROM users LIMIT 1 OFFSET {int(id)-1}")
-                recipient_value = cur.fetchone()
-                return [not_key, now_sender, recipient, recipient_value]
-            return [1, "", "", ""]
-            
+        cur = con.cursor()
+        not_key = 1
 
+        #### есть ли ключи
+        cur.execute("SELECT 1 FROM keys WHERE id = ? LIMIT 1", (rowid,))
+        if not cur.fetchone():
+            return [not_key, [], ""]
+
+        cur.execute("SELECT key FROM keys WHERE id = ? LIMIT 1", (id,))
+        recipient_key = cur.fetchone()
+        if not recipient_key:
+            return RedirectResponse(url="/", status_code=303)
+        not_key = 0
+        
+        offset_value = (page - 1) * 10
+        cur.execute("""SELECT * FROM messages
+                    WHERE ((id_sender = ? AND receiver_id = ? AND type = 1) OR
+                    (id_sender = ? AND receiver_id = ? AND type = 0))
+                    ORDER BY timestamp DESC
+                    LIMIT ? OFFSET ?""", (rowid, id, id, rowid, 10, offset_value))
+        all_messages = cur.fetchall()
+
+        #### информация о получателе
+        cur.execute("SELECT * FROM users WHERE ROWID = ? LIMIT 1", (id,))
+        recipient_value = cur.fetchone()
+
+        return [not_key, all_messages, recipient_value]

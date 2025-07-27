@@ -1,25 +1,4 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Environment
-.env
-.venv/
-venv/
-ENV/
-
-# VSCode, PyCharm, etc.
-.vscode/
-.idea/
-
-# Mac/Linux/Windows system files
-.DS_Store
-Thumbs.db
-
-# Test coverage
-.coverage
-htmlcov/
-
-# Logs
+secret_key.env
 *.log
+*.bat
