@@ -12,7 +12,7 @@ from cryptography.hazmat.backends import default_backend
 import base64
 from get_methods import * 
 
-chat_router = APIRouter()
+chat_router = APIRouter(prefix="/messages")
 path_templates = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=path_templates)
 db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db") 
@@ -26,14 +26,14 @@ class MessageRequest(BaseModel):
     is_admin: bool = False  # флаг, указывающий что сообщение от админа
 
 
-@chat_router.get("/messages")
+@chat_router.get("/")
 async def messages_redirect(request: Request):
     if not(request.session.get("user_logged")):
         return RedirectResponse(url="/")
     return RedirectResponse(url="/messages/1", status_code=303)
 
 
-@chat_router.get("/messages/{id}") 
+@chat_router.get("/{id}") 
 async def messages(request: Request, id: str):
     if not(request.session.get("user_logged")):
         return RedirectResponse(url="/")
@@ -71,7 +71,7 @@ async def messages(request: Request, id: str):
 
 
 
-@chat_router.get("/messages/{id}/data")
+@chat_router.get("/{id}/data")
 async def get_messages_data(request: Request, id: int, page: int = Query(1)):
     rowid = int(request.session['user_data']['rowid'])
     result = get_message(rowid, id, page)

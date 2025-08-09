@@ -128,7 +128,7 @@ async def register(request: Request):
         'path': "/static/assets/images/my-profile.jpg",
         'rowid': rowid
     }
-    return RedirectResponse(url=f"/messages", status_code=303) 
+    return RedirectResponse(url=f"/messages/", status_code=303) 
 
 
 @router.get('/privacy')

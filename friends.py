@@ -7,14 +7,14 @@ import sqlite3 as sq
 from get_methods import *
 
 
-sub_router = APIRouter()
+sub_router = APIRouter(prefix="/subscriptions")
 path_templates = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=path_templates)
 db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db")
 
 
 # подписки
-@sub_router.get("/subscriptions")
+@sub_router.get("/")
 async def test_friends(request: Request):
     user_logged = request.session.get("user_logged")
     if not(user_logged):

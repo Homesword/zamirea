@@ -1,5 +1,5 @@
 import sqlite3 as sq
-from fastapi import APIRouter, Request, File, UploadFile, Form
+from fastapi import APIRouter, Request, File, UploadFile, Form, Query, HTTPException
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import os 
@@ -8,10 +8,143 @@ from get_methods import *
 from datetime import datetime
 import hashlib
 
-profiles_router = APIRouter()
+
+profiles_router = APIRouter(prefix="/profile")
 path_templates = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=path_templates)
 db_path = os.path.join(os.path.dirname(__file__), "zamirea_db.db") 
+
+
+@profiles_router.get("/load-posts")
+async def load_profile_posts(request: Request, offset: int = Query(..., gt=-1), 
+                     limit: int = Query(..., gt=0, le=100), user_id: int = Query(..., gt=0)):
+    try:
+        with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            cur.execute("SELECT * FROM posts WHERE who = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?", (user_id, limit, offset))
+
+            user_data = request.session['user_data']
+            int_rowid = int(user_data['rowid'])
+
+            cur.execute("""SELECT p.who, p.timestamp, p.text, p.likes, p.post_id,
+                u.name, u.login, u.avatar,
+                CASE WHEN l.whom IS NOT NULL THEN 1 ELSE 0 END AS liked_by_viewer
+                FROM posts p
+                JOIN users u ON u.ROWID = p.who
+                LEFT JOIN like l ON l.whom = p.post_id AND l.who = ?
+                WHERE p.who = ?
+                ORDER BY p.timestamp DESC
+                LIMIT ? OFFSET ?
+                """, (int_rowid, user_id, limit, offset))
+
+            user_posts = [
+                {
+                    "who": row[0],
+                    "timestamp": row[1],
+                    "text": row[2],
+                    "likes": row[3],
+                    "post_id": row[4],
+                    "name": row[5],
+                    "login": row[6],
+                    "avatar": row[7],
+                    "liked_by_viewer": bool(row[8]),
+                    "is_owner": row[0] == int_rowid
+                }
+                for row in cur.fetchall()
+            ]
+    
+
+        # print(user_posts)
+        return JSONResponse(content={"posts": user_posts})
+    
+    
+    
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@profiles_router.get("/load-likes")
+async def load_likes(request: Request, offset: int = Query(..., gt=-1), 
+                     limit: int = Query(..., gt=0, le=100), user_id: int = Query(..., gt=0)):
+    try:
+        with sq.connect(db_path) as con:
+                cur = con.cursor() 
+
+                user_data = request.session['user_data']
+                int_rowid = int(user_data['rowid'])
+
+                cur.execute("""SELECT p.who, p.timestamp, p.text, p.likes, p.post_id,
+                                u.name, u.login, u.avatar, CASE WHEN l2.whom IS 
+                                NOT NULL THEN 1 ELSE 0 END AS liked_by_viewer
+                                FROM like l1 JOIN posts p ON p.post_id = l1.whom
+                                JOIN users u ON u.ROWID = p.who LEFT JOIN 
+                                like l2 ON l2.whom = p.post_id AND l2.who = ?
+                                WHERE l1.who = ?""", (int_rowid, user_id))
+                user_likes = [
+                    {
+                        "who": row[0],
+                        "timestamp": row[1],
+                        "text": row[2],
+                        "likes": row[3],
+                        "post_id": row[4],
+                        "name": row[5],
+                        "login": row[6],
+                        "avatar": row[7],
+                        "liked_by_viewer": bool(row[8])
+                    }
+                    for row in cur.fetchall()
+                ]
+        return JSONResponse(content={"posts": user_likes})
+    
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@profiles_router.get("/load-sub")
+async def load_sub(
+    request: Request,
+    offset: int = Query(..., gt=-1),
+    limit: int = Query(..., gt=0, le=100),
+    user_id: int = Query(..., gt=0)
+):
+    try:
+        with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            cur.execute("""
+                SELECT 
+                    u.name,           -- 0
+                    u.login,          -- 1
+                    u.avatar,         -- 2
+                    m.sub,            -- 3 (кол-во подписок)
+                    m.followers,      -- 4 (кол-во подписчиков)
+                    s.author          -- 5 (id автора)
+                FROM subscribers s
+                JOIN users u ON u.ROWID = s.author
+                JOIN media m ON m.ROWID = s.author
+                WHERE s.subscriber = ?
+                LIMIT ? OFFSET ?
+            """, (user_id, limit, offset))
+            
+            rows = cur.fetchall()
+
+        # Преобразуем к списку словарей
+        subs_list = [
+            {
+                "name": row[0],
+                "login": row[1],
+                "avatar": row[2],
+                "subscriptions": row[3],
+                "followers": row[4],
+                "id": row[5]
+            }
+            for row in rows
+        ]
+
+        return JSONResponse(content={"subs": subs_list})
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @profiles_router.get("/{id}")
 async def get_profile(request: Request, id: int):
@@ -59,60 +192,6 @@ async def get_profile(request: Request, id: int):
             media_data = cur.fetchone()
             posts, sub = media_data[0], media_data[1]
             likes, followers = media_data[2], media_data[3]
-            #### посты 
-            cur.execute("SELECT * FROM posts WHERE who = ?", (id,))
-            user_posts_raw = cur.fetchall()
-
-            cur.execute("SELECT whom FROM like WHERE who = ?", (int_rowid,))
-            liked_post_id = set(row[0] for row in cur.fetchall())
-
-            user_posts = []
-            for post in user_posts_raw:
-                post_dict = {
-                    "who": post[0],
-                    "timestamp": post[1],
-                    "text": post[2],
-                    "likes": post[3],
-                    "post_id": post[4],
-                    "liked_by_viewer": post[4] in liked_post_id
-                }
-                user_posts.append(post_dict)
-
-            #### понравившиеся
-            cur.execute("""SELECT p.who, p.timestamp, p.text, p.likes, p.post_id,
-                            u.name, u.login, u.avatar, CASE WHEN l2.whom IS 
-                            NOT NULL THEN 1 ELSE 0 END AS liked_by_viewer
-                            FROM like l1 JOIN posts p ON p.post_id = l1.whom
-                            JOIN users u ON u.ROWID = p.who LEFT JOIN 
-                            like l2 ON l2.whom = p.post_id AND l2.who = ?
-                            WHERE l1.who = ?""", (int_rowid, id))
-            user_likes = [
-                {
-                    "who": row[0],
-                    "timestamp": row[1],
-                    "text": row[2],
-                    "likes": row[3],
-                    "post_id": row[4],
-                    "name": row[5],
-                    "login": row[6],
-                    "avatar": row[7],
-                    "liked_by_viewer": bool(row[8])
-                }
-                for row in cur.fetchall()
-            ]
-
-            #### подписки
-            cur.execute("""
-                SELECT 
-                    u.name, u.login, u.avatar,
-                    m.sub, m.followers,
-                    s.author
-                FROM subscribers s
-                JOIN users u ON u.ROWID = s.author
-                JOIN media m ON m.ROWID = s.author
-                WHERE s.subscriber = ?
-            """, (id,))
-            sub_block = cur.fetchall()
 
     csrf_token = generate_csrf_token()
     request.session["csrf_token"] = csrf_token
@@ -123,8 +202,8 @@ async def get_profile(request: Request, id: int):
                                                      "path_profile": path_profile, "rowid_profile": rowid_profile,
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
                                                      "posts": posts, "likes": likes, "sub": sub, "followers": followers,
-                                                     "user_posts": user_posts, "user_likes": user_likes, "sub_block": sub_block,
                                                      "csrf_token": csrf_token})
+
 
 # выгрузка аватара
 @profiles_router.post("/upload_avatar")
@@ -141,7 +220,7 @@ async def upload_avatar(request: Request, avatar: UploadFile = File(...), csrf_t
     
     #### ничего не отправил
     if avatar.filename == '':
-        return RedirectResponse(url=f"/{rowid}", status_code=303)
+        return RedirectResponse(url=f"/profile/{rowid}", status_code=303)
 
     #### проверка на расширение
     MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
@@ -150,7 +229,7 @@ async def upload_avatar(request: Request, avatar: UploadFile = File(...), csrf_t
 
         #### если больше допустимого размера
         if len(contents) > MAX_FILE_SIZE:
-            return RedirectResponse(url=f"/{rowid}", status_code=303)
+            return RedirectResponse(url=f"/profile/{rowid}", status_code=303)
 
         #### успешно, сохраняем аватарку
         filename = f"{rowid}{(os.path.splitext(avatar.filename)[1])}"
@@ -167,10 +246,11 @@ async def upload_avatar(request: Request, avatar: UploadFile = File(...), csrf_t
             cur.execute("UPDATE users SET avatar = (?) WHERE ROWID = (?)", (new_avatar_path, user_data['rowid']))
 
         print(f"Пользователь {user_data['login']} успешно сменил аватарку")
-        return RedirectResponse(url=f"/{rowid}", status_code=303)
+        return RedirectResponse(url=f"/profile/{rowid}", status_code=303)
     else:
-        return RedirectResponse(url=f"/{rowid}", status_code=303)
+        return RedirectResponse(url=f"/profile/{rowid}", status_code=303)
     
+
 # создание нового поста
 @profiles_router.post("/new-post")
 async def upload_avatar(request: Request, text_post: str = Form(...), csrf_token: str = Form(...)): 
@@ -185,7 +265,8 @@ async def upload_avatar(request: Request, text_post: str = Form(...), csrf_token
             cur.execute("INSERT INTO posts (who, timestamp, text, likes, post_id) VALUES (?, ?, ?, ?, ?)", (rowid, date, text_post, 0, post_id))
             cur.execute("UPDATE media SET posts = posts + 1 WHERE ROWID = ?", (rowid,))
             con.commit()
-    return RedirectResponse(url=f"/{rowid}", status_code=303)
+    return RedirectResponse(url=f"/profile/{rowid}", status_code=303)
+
 
 # редактирование поста
 @profiles_router.post("/edit-post")
@@ -203,7 +284,8 @@ async def edit_post(request: Request,  post_id: str = Form(...), edited_text: st
                 (date, edited_text, post_id, post_id))
             con.commit()
 
-    return RedirectResponse(url=f"/{rowid}", status_code=303) 
+    return RedirectResponse(url=f"/profile/{rowid}", status_code=303) 
+
 
 # удаление поста
 @profiles_router.post("/delete-post")
@@ -219,7 +301,8 @@ async def delete_post(request: Request, post_id: str = Form(...), csrf_token: st
             cur.execute("DELETE FROM posts WHERE post_id = ?", (post_id,))
             cur.execute("UPDATE media SET posts = posts - 1 WHERE ROWID = ?", (rowid,))
             con.commit()
-     return RedirectResponse(url=f"/{rowid}", status_code=303) 
+     return RedirectResponse(url=f"/profile/{rowid}", status_code=303) 
+
 
 # лайк поста
 @profiles_router.post('/like-post')
@@ -251,6 +334,7 @@ async def like_post(request: Request, post_id: str = Form(...), csrf_token: str 
             con.commit()
     return JSONResponse({"liked": liked, "likes": likes})
 
+
 # подписка
 @profiles_router.post('/add-friend')
 async def sub_user(request: Request, user_id: int = Form(...), csrf_token: str = Form(...)):
@@ -276,10 +360,12 @@ async def sub_user(request: Request, user_id: int = Form(...), csrf_token: str =
         
     return JSONResponse(content={"status_sub": status_sub})
 
+
 # генерация post_id
 def generate_post_id(who: str, timestamp: str, text: str) -> str:
     base = f"{who}|{timestamp}|{text}"
     return hashlib.sha256(base.encode('utf-8')).hexdigest()
+
 
 # проверка расширения
 def allowed_file(filename):

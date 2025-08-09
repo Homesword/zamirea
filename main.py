@@ -24,6 +24,7 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # подключаем маршруты 
 app.include_router(router)
+app.include_router(profiles_router)
 app.include_router(chat_router)
 app.include_router(sub_router)
-app.include_router(profiles_router)
+
