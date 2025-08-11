@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query, HTTPException
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 import os
 import sqlite3 as sq
 from get_methods import *
@@ -28,36 +28,100 @@ async def test_friends(request: Request):
 
     with sq.connect(db_path) as con:
         cur = con.cursor()
+
         #### счётчик подписчиков и подписок
         cur.execute("SELECT sub, followers FROM media WHERE ROWID = ?", (int_rowid,))
         score_sub, score_followers = cur.fetchone()
 
-        #### подписки
-        cur.execute("""
-            SELECT 
-                u.name, u.login, u.avatar,
-                m.sub, m.followers,
-                s.author
-            FROM subscribers s
-            JOIN users u ON u.ROWID = s.author
-            JOIN media m ON m.ROWID = s.author
-            WHERE s.subscriber = ?
-        """, (int_rowid,))
-        sub_block = cur.fetchall()
-
-        #### подписчики
-        cur.execute("""
-        SELECT u.name, u.login, u.avatar, m.sub, m.followers, u.ROWID
-        FROM subscribers s
-        JOIN users u ON u.ROWID = s.subscriber
-        JOIN media m ON m.ROWID = s.subscriber
-        WHERE s.author = ?
-        """, (int_rowid,))
-
-        followers_block = cur.fetchall()
+  
 
     return templates.TemplateResponse("friends.html", {"request": request, "name": user_data['name'], "login": user_data['login'],
                                                      "path": user_data['path'], "rowid": user_data['rowid'],
                                                      "other_chats": other_chats, "other_subscribers": other_subscribers,
-                                                     "score_sub": score_sub, "score_followers": score_followers,
-                                                     "sub_block": sub_block, "followers_block": followers_block})
+                                                     "score_sub": score_sub, "score_followers": score_followers})
+
+
+@sub_router.get("/load-sub")
+async def load_sub_page(request: Request, offset: int = Query(...), 
+                     limit: int = Query(...), user_id: int = Query(...)):
+    try:
+        with sq.connect(db_path) as con:
+            cur = con.cursor() 
+            cur.execute("""
+                SELECT 
+                    u.name,           
+                    u.login,          
+                    u.avatar,         
+                    m.sub,            
+                    m.followers,      
+                    s.author          
+                FROM subscribers s
+                JOIN users u ON u.ROWID = s.author
+                JOIN media m ON m.ROWID = s.author
+                WHERE s.subscriber = ?
+                LIMIT ? OFFSET ?
+            """, (user_id, limit, offset))
+            
+            rows = cur.fetchall()
+
+        subs_list = [
+            {
+                "name": row[0],
+                "login": row[1],
+                "avatar": row[2],
+                "subscriptions": row[3],
+                "followers": row[4],
+                "id": row[5]
+            }
+            for row in rows
+        ]
+
+        return JSONResponse(content={"subs": subs_list})
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+
+@sub_router.get("/load-followers")
+async def load_followers_page(
+    request: Request,
+    offset: int = Query(...),
+    limit: int = Query(...),
+    user_id: int = Query(...)
+):
+    try:
+        with sq.connect(db_path) as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT
+                    u.name,           
+                    u.login,          
+                    u.avatar,         
+                    m.sub,            
+                    m.followers,      
+                    s.subscriber      
+                FROM subscribers s
+                JOIN users u ON u.ROWID = s.subscriber
+                JOIN media m ON m.ROWID = s.subscriber
+                WHERE s.author = ?
+                LIMIT ? OFFSET ?
+            """, (user_id, limit, offset))
+
+            rows = cur.fetchall()
+
+        followers_list = [
+            {
+                "name": row[0],
+                "login": row[1],
+                "avatar": row[2],
+                "subscriptions": row[3],
+                "followers": row[4],
+                "id": row[5]
+            }
+            for row in rows
+        ]
+
+        return JSONResponse(content={"subs": followers_list})
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

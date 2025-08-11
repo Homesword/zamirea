@@ -100,47 +100,60 @@ async def load_likes(request: Request, offset: int = Query(..., gt=-1),
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@profiles_router.get("/load-sub")
-async def load_sub(
+@profiles_router.get("/load-likes")
+async def load_likes(
     request: Request,
     offset: int = Query(..., gt=-1),
     limit: int = Query(..., gt=0, le=100),
     user_id: int = Query(..., gt=0)
 ):
     try:
+        user_data = request.session.get('user_data')
+        if not user_data or 'rowid' not in user_data:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        int_rowid = int(user_data['rowid'])
+
         with sq.connect(db_path) as con:
-            cur = con.cursor() 
+            cur = con.cursor()
             cur.execute("""
-                SELECT 
-                    u.name,           -- 0
-                    u.login,          -- 1
-                    u.avatar,         -- 2
-                    m.sub,            -- 3 (кол-во подписок)
-                    m.followers,      -- 4 (кол-во подписчиков)
-                    s.author          -- 5 (id автора)
-                FROM subscribers s
-                JOIN users u ON u.ROWID = s.author
-                JOIN media m ON m.ROWID = s.author
-                WHERE s.subscriber = ?
+                SELECT
+                    p.who,
+                    p.timestamp,
+                    p.text,
+                    p.likes,
+                    p.post_id,
+                    u.name,
+                    u.login,
+                    u.avatar,
+                    CASE WHEN l2.whom IS NOT NULL THEN 1 ELSE 0 END AS liked_by_viewer
+                FROM like l1
+                JOIN posts p ON p.post_id = l1.whom
+                JOIN users u ON u.ROWID = p.who
+                LEFT JOIN like l2 ON l2.whom = p.post_id AND l2.who = ?
+                WHERE l1.who = ?
+                ORDER BY p.timestamp DESC, p.post_id DESC
                 LIMIT ? OFFSET ?
-            """, (user_id, limit, offset))
-            
+            """, (int_rowid, user_id, limit, offset))
+
             rows = cur.fetchall()
 
-        # Преобразуем к списку словарей
-        subs_list = [
-            {
-                "name": row[0],
-                "login": row[1],
-                "avatar": row[2],
-                "subscriptions": row[3],
-                "followers": row[4],
-                "id": row[5]
-            }
-            for row in rows
-        ]
+            user_likes = [
+                {
+                    "who": row[0],
+                    "timestamp": row[1],
+                    "text": row[2],
+                    "likes": row[3],
+                    "post_id": row[4],
+                    "name": row[5],
+                    "login": row[6],
+                    "avatar": row[7],
+                    "liked_by_viewer": bool(row[8])
+                }
+                for row in rows
+            ]
 
-        return JSONResponse(content={"subs": subs_list})
+        return JSONResponse(content={"posts": user_likes})
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
