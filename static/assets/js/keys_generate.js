@@ -10,15 +10,15 @@ async function generateAndSaveKeys(rowid) {
         ["encrypt", "decrypt"]
     );
 
-    // Экспортируем приватный ключ в формате PEM и сохраняем в localStorage
+    // экспортируем приватный ключ в формате PEM и сохраняем в localStorage
     const privateKey = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
     const privateKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(privateKey)));
     localStorage.setItem("privateKey", privateKeyBase64);
 
-    // Экспортируем публичный ключ в формате PEM
+    // экспортируем публичный ключ в формате PEM
     const publicKey = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
     const publicKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(publicKey)));
     
-    // Отправляем публичный ключ на сервер
+    // отправляем публичный ключ на сервер
     await sendPublicKeyToServer(publicKeyBase64, rowid);
 }
