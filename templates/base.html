@@ -1,0 +1,207 @@
+{% block base %}
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/assets/css/animate.min.css">
+    <link rel="stylesheet" href="/static/assets/css/remixicon.css">
+    <link rel="stylesheet" href="/static/assets/css/flaticon.css">
+    <link rel="stylesheet" href="/static/assets/css/jquery-ui.min.css">
+    <link rel="stylesheet" href="/static/assets/css/magnific-popup.min.css">
+    <link rel="stylesheet" href="/static/assets/css/simplebar.min.css">
+    <link rel="stylesheet" href="/static/assets/css/metismenu.min.css">
+    <link rel="stylesheet" href="/static/assets/css/owl.carousel.min.css">
+    <link rel="stylesheet" href="/static/assets/css/owl.theme.default.min.css">
+    <link rel="stylesheet" href="/static/assets/css/style.css">
+    <link rel="stylesheet" href="/static/assets/css/responsive.css">
+    <title>{% block title %}{% endblock %}</title>
+    {% block other_links %}{% endblock %}
+    <link rel="icon" type="image/png" href="/static/assets/images/favicon.png">
+</head>
+
+<body>
+    <div class="preloader-area">
+        <div class="spinner">
+            <div class="inner">
+                <div class="disc"></div>
+                <div class="disc"></div>
+                <div class="disc"></div>
+            </div>
+        </div>
+    </div>
+    <div class="main-content-wrapper d-flex flex-column">
+        <div class="navbar-area">
+            <div class="main-responsive-nav">
+                <div class="main-responsive-menu">
+                    <div class="responsive-burger-menu d-lg-none d-block">
+                        <span class="top-bar"></span>
+                        <span class="middle-bar"></span>
+                        <span class="bottom-bar"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-navbar">
+                <nav class="navbar navbar-expand-lg navbar-light">
+                    <a href="/" class="navbar-brand d-flex align-items-center">
+                        <img src="/static/assets/images/logo.png" alt="logo">
+                    </a>
+
+                    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                        <div style="padding-right: 450px;">
+                            <div class="navbar-burger-menu m-auto">
+                                <span class="top-bar"></span>
+                                <span class="middle-bar"></span>
+                                <span class="bottom-bar"></span>
+                            </div>
+                        </div>
+
+                        <div class="search-box m-auto" style="z-index: -999; opacity: 0%"></div> <!-- сделать поиск -->
+
+                        <div class="others-options d-flex align-items-center">
+                            <div class="option-item">
+                                <div class="dropdown profile-nav-item">
+                                    <a href="" class="dropdown-bs-toggle" role="button" data-bs-toggle="dropdown"
+                                        aria-haspopup="true" aria-expanded="false">
+                                        <div class="menu-profile">
+                                            <img src="{{path}}" class="rounded-circle" alt="image">
+                                            <span class="name">{{name}}</span>
+                                        </div>
+                                    </a>
+
+                                    <div class="dropdown-menu">
+                                        <div class="profile-header">
+                                            <h3>{{name}}</h3>
+                                            <a href="mailto:{{login}}">{{login}}</a>
+                                        </div>
+                                        <ul class="profile-body">
+                                            <li><i class="flaticon-user"></i> <a href="/profile/{{rowid}}">Мой
+                                                    профиль</a></li>
+                                            <li><i class="flaticon-privacy"></i> <a href="/privacy">Соглашение</a></li>
+                                            <li><i class="flaticon-logout"></i> <a href="/logout">Выйти</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+            <div class="others-option-for-responsive">
+                <div class="container">
+                    <div class="dot-menu">
+                        <div class="inner">
+                            <div class="circle circle-one"></div>
+                            <div class="circle circle-two"></div>
+                            <div class="circle circle-three"></div>
+                        </div>
+                    </div>
+                    <div class="container">
+                        <div class="option-inner">
+                            <div class="others-options d-flex align-items-center">
+                                <div class="option-item">
+                                    <a href="/" class="home-btn"><i class="flaticon-home"></i></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidemenu-area">
+            <div class="responsive-burger-menu d-lg-none d-block">
+                <span class="top-bar"></span>
+                <span class="middle-bar"></span>
+                <span class="bottom-bar"></span>
+            </div>
+
+            <div class="sidemenu-body">
+                <ul class="sidemenu-nav metisMenu h-100" id="sidemenu-nav" data-simplebar>
+                    <li class="nav-item {%block tape%} {%endblock%}">
+                        <a href="/" class="nav-link">
+                            <span class="icon"><i class="flaticon-newspaper"></i></span>
+                            <span class="menu-title">Лента</span>
+                        </a>
+                    </li>
+                    <li class="nav-item  {%block message%} {%endblock%}">
+                        <a href="/messages/" class="nav-link">
+                            <span class="icon"><i class="flaticon-comment-1"></i></span>
+                            <span class="menu-title">Сообщения</span>
+                        </a>
+                    </li>
+                    <li class="nav-item {%block sub%} {%endblock%}">
+                        <a href="/subscriptions/" class="nav-link">
+                            <span class="icon"><i class="flaticon-friends"></i></span>
+                            <span class="menu-title">Подписки</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="right-sidebar-area" data-simplebar>
+            <div class="recent-chat-box">
+                <div class="title">
+                    <h3>Недавние чаты</h3>
+                </div>
+
+                <div class="chat-body" data-simplebar>
+                    <!-- другие чаты -->
+                    {% if not other_chats == 0 %}
+                    {% for chat in other_chats %}
+                    <div class="chat-item">
+                        <a href="/messages/{{chat[0]}}"><img src="{{chat[1][1]}}" class="rounded-circle"
+                                alt="image"></a>
+                        <span class="name"><a href="/messages/{{chat[0]}}">{{chat[1][0]}}</a></span>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p>У вас нет переписок :c</p>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <div class="recent-contact-box">
+                <div class="title">
+                    <h3>Недавние подписки</h3>
+                </div>
+                <div class="contact-body" data-simplebar>
+                    {% if not other_subscribers == 0 %}
+                    {% for sub in other_subscribers %}
+                    <div class="contact-item">
+                        <a href="/profile/{{sub[0]}}"><img src="{{sub[1][1]}}" class="rounded-circle" alt="image"></a>
+                        <span class="name"><a href="/profile/{{sub[0]}}">{{sub[1][0]}}</a></span>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p>У вас нет подписок :c</p>
+                    {% endif %}
+
+
+                </div>
+            </div>
+        </div>
+        {% block main %} {% endblock %}
+
+    </div>
+    <script src="/static/assets/js/jquery.min.js"></script>
+    <script src="/static/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/assets/js/jquery.magnific-popup.min.js"></script>
+    <script src="/static/assets/js/jquery-ui.min.js"></script>
+    <script src="/static/assets/js/simplebar.min.js"></script>
+    <script src="/static/assets/js/metismenu.min.js"></script>
+    <script src="/static/assets/js/owl.carousel.min.js"></script>
+    <script src="/static/assets/js/wow.min.js"></script>
+    <script src="/static/assets/js/main.js"></script>
+    <script src="/static/assets/js/send-key-to-server.js"></script>
+    <script src="/static/assets/js/keys_generate.js"></script>
+    {% block other_links_bottom %}{% endblock %}
+</body>
+
+</html>
+{% endblock%}

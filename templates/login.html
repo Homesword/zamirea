@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <link rel="stylesheet" href="../static/assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../static/assets/css/animate.min.css">
+    <link rel="stylesheet" href="../static/assets/css/remixicon.css">
+    <link rel="stylesheet" href="../static/assets/css/flaticon.css">
+    <link rel="stylesheet" href="../static/assets/css/jquery-ui.min.css">
+    <link rel="stylesheet" href="../static/assets/css/magnific-popup.min.css">
+    <link rel="stylesheet" href="../static/assets/css/simplebar.min.css">
+    <link rel="stylesheet" href="../static/assets/css/metismenu.min.css">
+    <link rel="stylesheet" href="../static/assets/css/owl.carousel.min.css">
+    <link rel="stylesheet" href="../static/assets/css/owl.theme.default.min.css">
+    <link rel="stylesheet" href="../static/assets/css/style.css">
+    <link rel="stylesheet" href="../static/assets/css/responsive.css">
+
+    <title>Войдите в аккаунт</title>
+
+    <link rel="icon" type="image/png" href="../static/assets/images/favicon.png">
+</head>
+
+<body>
+
+    <div class="preloader-area">
+        <div class="spinner">
+            <div class="inner">
+                <div class="disc"></div>
+                <div class="disc"></div>
+                <div class="disc"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-authentication-area">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-6 col-md-12">
+                    <div class="profile-authentication-image">
+                        <div class="content-image">
+                            <div class="logo">
+                                <a href="/"><img src="../static/assets/images/logo.png" alt="Zust"></a>
+                            </div>
+                            <div class="vector-image">
+                                <img src="../static/assets/images/vector.png" alt="image">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6 col-md-12">
+                    <div class="login-form">
+                        <h2>{{text_header}}</h2>
+
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+                            <div class="form-group">
+                                <label>Электронная почта</label>
+                                <input type="text" class="form-control" name="login" maxlength="30" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Пароль</label>
+                                <input type="password" class="form-control" name="password" maxlength="30" required>
+                            </div>
+
+                            <div class="remember-me-wrap d-flex justify-content-between align-items-center">
+                                <p>
+                                    <input type="checkbox" id="test1" required>
+                                    <label for="test1">Согласен на <a href="/privacy">обработку данных</a></label>
+                                </p>
+
+                                <div class="lost-your-password-wrap">
+                                    <a href="/register" class="lost-your-password">Зарегистрироваться</a>
+                                </div>
+                            </div>
+                            <button type="submit" class="default-btn">Войти</button>
+
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="home-btn-icon">
+            <a href="/"><i class="flaticon-home"></i></a>
+        </div>
+    </div>
+
+    <script src="../static/assets/js/jquery.min.js"></script>
+    <script src="../static/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="../static/assets/js/jquery.magnific-popup.min.js"></script>
+    <script src="../static/assets/js/jquery-ui.min.js"></script>
+    <script src="../static/assets/js/simplebar.min.js"></script>
+    <script src="../static/assets/js/metismenu.min.js"></script>
+    <script src="../static/assets/js/owl.carousel.min.js"></script>
+    <script src="../static/assets/js/wow.min.js"></script>
+    <script src="../static/assets/js/main.js"></script>
+</body>
+
+</html>

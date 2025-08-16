@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %} Подписки {% endblock %}
+{% block sub %}active{% endblock %}
+
+{% block main %}
+<div class="content-page-box-area">
+    <div class="page-banner-box bg-4">
+        <h3>Количество подписок: {{ score_sub }}<br>Количество подписчиков: {{ score_followers }}</h3>
+    </div>
+
+    <div class="friends-inner-box-style d-flex justify-content-between align-items-center margin-top-25">
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="friend-requests-tab" data-bs-toggle="tab" href="#sub-block" role="tab"
+                    aria-controls="friend-requests">Подписки</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="people-you-know-tab" data-bs-toggle="tab" href="#followers-block" role="tab"
+                    aria-controls="people-you-know">Подписчики</a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="tab-content" id="myTabContent">
+
+        <div class="tab-pane fade show active" id="sub-block" role="tabpanel">
+            {% if score_sub == 0 %}
+            <div class="friends-inner-box-style d-flex justify-content-between align-items-center">
+                <div class="title">
+                    <h3>У вас нет подписок :c</h3>
+                </div>
+            </div>
+            {% else %}
+            <div class="row justify-content-center friends-list-row" data-type="subs">
+                <!-- блок подписок -->
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="tab-pane fade" id="followers-block" role="tabpanel">
+            {% if score_followers == 0 %}
+            <div class="friends-inner-box-style d-flex justify-content-between align-items-center">
+                <div class="title">
+                    <h3>У вас нет подписчиков :c</h3>
+                </div>
+            </div>
+            {% else %}
+            <div class="row justify-content-center friends-list-row" data-type="followers">
+                <!-- блок подписчиков -->
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+
+{% block other_links_bottom %}
+<script>const rowid = {{ rowid }}</script>
+<script src="/static/assets/js/sub-page-load.js"></script>
+{% endblock %}

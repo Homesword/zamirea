@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+
+{% block title %}
+Чат с {{recipient_value[0]}}
+{% endblock %}
+
+{% block message %}active{% endblock %} <!-- подсветка, что мы на блоке сообщений -->
+{% block other_links%}
+<script src="/static/assets/js/buffer.js"></script>
+<script src="/static/assets/js/load_pem.js"></script>
+<script src="/static/assets/js/decode.js"></script>
+<script src="/static/assets/js/send-message.js"></script>
+{%endblock%}
+{% block main %}
+
+<div class="content-page-box-area">
+    <div class="all-messages-body">
+        <div class="all-messages-header d-flex justify-content-between align-items-center">
+            <h3>Чат с {{recipient_value[0]}}</h3>
+        </div>
+
+        <div class="messages-profile-box">
+            <a href="/profile/{{id_recipient}}"><img src="{{recipient_value[3]}}" height="100px" ; width="100px" ;
+                    class="rounded-circle" alt="image"></a>
+            <h3><a href="/profile/{{id_recipient}}">{{recipient_value[0]}}</a></h3>
+        </div>
+
+        <div class="messages-chat-container" id="test1">
+            <div class="chat-content" id="test2">
+                <div class="chat" id="chat-container">
+                    <!-- тут сообщения -->
+                </div>
+
+                <script>
+                    let currentPage = 1;
+                    let isLoading = false;
+                    let firstLoad = true;
+                    let hasMoreMessages = true;
+
+                    const chatId = parseInt("{{ id_recipient }}");
+                    const rowid = parseInt("{{ rowid }}");
+                    const myAvatar = "{{ path }}";
+                    const recipientAvatar = "{{ recipient_value[3].replace('\\', '/').strip() }}";
+
+                    function generateMessageId() {
+                        return 'msg-' + performance.now().toString(36).replace('.', '') +
+                            '-' + Math.random().toString(36).substring(2, 9);
+                    }
+
+                    async function loadMessages(page = 1) {
+                        if (isLoading || !hasMoreMessages) return;
+                        isLoading = true;
+
+                        const container = document.getElementById('chat-container');
+                        if (!container) {
+                            console.error('❌ Контейнер #chat-container не найден');
+                            return;
+                        }
+
+                        const scrollBefore = container.scrollHeight;
+
+                        try {
+                            console.log(`🚀 fetch на /messages/${chatId}/data?page=${page}`);
+                            const response = await fetch(`/messages/${chatId}/data?page=${page}`);
+
+                            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+
+                            const messages = await response.json();
+                            console.log(`✅ Получено ${messages.length} сообщений на page=${page}`);
+
+                            if (!Array.isArray(messages) || messages.length === 0) {
+                                console.log("⚠️ Больше сообщений нет");
+                                hasMoreMessages = false;
+                                return;
+                            }
+
+                            if (messages.length < 10) {
+                                hasMoreMessages = false;
+                            }
+
+
+                            const fragment = document.createDocumentFragment();
+                            messages.reverse();
+                            for (const message of messages) {
+                                const messageId = generateMessageId();
+                                const messageDiv = document.createElement('div');
+                                messageDiv.className = `chat ${message.is_my ? 'chat-left' : ''}`;
+
+                                const profileLink = message.is_my ? `/${rowid}` : `/${chatId}`;
+                                const avatarSrc = message.is_my ? myAvatar : recipientAvatar;
+
+                                const avatarHTML = `
+                <div class="chat-avatar">
+                    <a href="${profileLink}" class="d-inline-block">
+                        <img src="${avatarSrc}" width="50" height="50" class="rounded-circle" alt="avatar">
+                    </a>
+                </div>`;
+
+                                const spanText = document.createElement('span');
+                                spanText.className = 'message-content';
+                                spanText.innerText = '[Загрузка...]';
+
+                                const spanTime = document.createElement('span');
+                                spanTime.className = 'time d-block';
+                                spanTime.innerText = message.time;
+
+                                const messageBody = document.createElement('div');
+                                messageBody.className = 'chat-message';
+                                messageBody.id = messageId;
+                                messageBody.appendChild(spanText);
+                                messageBody.appendChild(spanTime);
+
+                                const bodyWrapper = document.createElement('div');
+                                bodyWrapper.className = 'chat-body';
+                                bodyWrapper.appendChild(messageBody);
+
+                                messageDiv.innerHTML = avatarHTML;
+                                messageDiv.appendChild(bodyWrapper);
+
+                                fragment.appendChild(messageDiv);
+
+                                try {
+                                    const decryptedText = await decryptMessage(message.text || '');
+                                    spanText.innerText = decryptedText;
+                                } catch (err) {
+                                    console.error("❌ Ошибка расшифровки:", err);
+                                    spanText.innerText = '[Ошибка расшифровки]';
+                                }
+                            }
+
+                            container.prepend(fragment);
+
+                            if (firstLoad) {
+                                requestAnimationFrame(() => {
+                                    container.scrollTop = container.scrollHeight;
+                                    setTimeout(() => {
+                                        if (container.scrollTop !== container.scrollHeight) {
+                                            container.scrollTop = container.scrollHeight;
+                                        }
+                                    }, 100);
+                                    firstLoad = false;
+                                });
+                            } else {
+                                const scrollDiff = container.scrollHeight - scrollBefore;
+                                container.scrollTop += scrollDiff;
+                            }
+
+                        } catch (error) {
+                            console.error('❌ Ошибка загрузки:', error);
+                        } finally {
+                            isLoading = false;
+                        }
+                    }
+
+                    function forceScrollToBottom() {
+                        const container = document.getElementById('chat-container');
+                        if (container) {
+                            container.scrollTop = container.scrollHeight;
+                            setTimeout(() => {
+                                container.scrollTop = container.scrollHeight;
+                            }, 300);
+                        }
+                    }
+
+                    document.addEventListener('DOMContentLoaded', () => {
+                        console.log("✅ DOM загружен, инициализация");
+
+                        const chatContainer = document.getElementById('chat-container');
+                        if (!chatContainer) {
+                            console.error("❌ Элемент #chat-container не найден");
+                            return;
+                        }
+
+                        chatContainer.style.height = '90vh';
+                        chatContainer.style.overflowY = 'auto';
+
+                        window.addEventListener('load', forceScrollToBottom);
+
+                        loadMessages(currentPage);
+
+                        chatContainer.addEventListener('scroll', () => {
+                            if (chatContainer.scrollTop < 100 && !isLoading && hasMoreMessages) {
+                                currentPage++;
+                                console.log(`📥 Загружаем page=${currentPage}`);
+                                loadMessages(currentPage);
+                            }
+                        });
+                    });
+                </script>
+
+
+
+
+                <div class="chat-list-footer">
+                    <form class="d-flex align-items-center">
+                        <div class="btn-box d-flex align-items-center me-3">
+                            <button class="file-attachment-btn d-inline-block me-2" data-bs-toggle="tooltip"
+                                data-bs-placement="top" title="File Attachment" type="button"><i
+                                    class="ri-attachment-2"></i></button>
+
+                            <button class="emoji-btn d-inline-block" data-bs-toggle="tooltip" data-bs-placement="top"
+                                title="Emoji" type="button"><i class="ri-user-smile-line"></i></button>
+                        </div>
+
+                        <input type="text" class="form-control" id="sendMessageToServer"
+                            placeholder="Введите сообщение..." maxlength="80" required>
+                        <button type="button" class="send-btn d-inline-block" data-user-id="{{id_recipient}}"
+                            onclick="saveInput({{id_recipient}})">Послать</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script src="/static/assets/js/keys_generate.js"></script>
+<script>
+    window.onload = async function () {
+        console.log("Страница загружена, проверяем ключи...");
+        const not_key = {{ not_key | tojson
+    }};
+    if (not_key == 1) {
+        console.log("Ключи сгенерированы.");
+        await generateAndSaveKeys(rowid);
+        window.location.reload();
+    } else {
+        console.log("Пара ключей уже есть.");
+    }
+};
+</script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const chatId = parseInt("{{ id_recipient }}"); 
+        const rowid = parseInt("{{ rowid }}");        
+        const username = "{{ request.session.user_data.name if request.session.user_data is defined else '' }}"; 
+
+        const roomId = Math.min(chatId, rowid) + "_" + Math.max(chatId, rowid); 
+
+        const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        const ws = new WebSocket(`${protocol}${window.location.host}/messages/ws/${roomId}/${encodeURIComponent(username)}/${rowid}`);
+
+        ws.onopen = () => console.log("WS connected");
+        ws.onmessage = async (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+
+                const container = document.getElementById('chat-container');
+                if (!container) return;
+
+                const messageId = generateMessageId();
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat ${msg.is_self ? 'chat-left' : ''}`;
+
+                const profileLink = msg.is_self ? `/${rowid}` : `/${chatId}`;
+                const avatarSrc = msg.is_self ? myAvatar : recipientAvatar;
+
+                const avatarHTML = `
+            <div class="chat-avatar">
+                <a href="${profileLink}" class="d-inline-block">
+                    <img src="${avatarSrc}" width="50" height="50" class="rounded-circle" alt="avatar">
+                </a>
+            </div>`;
+
+                const spanText = document.createElement('span');
+                spanText.className = 'message-content';
+                spanText.innerText = '[Загрузка...]';
+
+                const spanTime = document.createElement('span');
+                spanTime.className = 'time d-block';
+                spanTime.innerText = (new Date()).toLocaleString();
+
+                const messageBody = document.createElement('div');
+                messageBody.className = 'chat-message';
+                messageBody.id = messageId;
+                messageBody.appendChild(spanText);
+                messageBody.appendChild(spanTime);
+
+                const bodyWrapper = document.createElement('div');
+                bodyWrapper.className = 'chat-body';
+                bodyWrapper.appendChild(messageBody);
+
+                messageDiv.innerHTML = avatarHTML;
+                messageDiv.appendChild(bodyWrapper);
+
+                container.appendChild(messageDiv);
+
+                if (msg.encrypted) {
+                    try {
+                        const decrypted = await decryptMessage(msg.text || "");
+                        spanText.innerText = decrypted;
+                    } catch (e) {
+                        console.error("Ошибка расшифровки WS:", e);
+                        spanText.innerText = "[Ошибка расшифровки]";
+                    }
+                } else {
+                    spanText.innerText = msg.text || "";
+                }
+
+                container.scrollTop = container.scrollHeight;
+
+            } catch (e) {
+                console.error("Ошибка в обработчике WS:", e, event.data);
+            }
+        };
+
+        ws.onclose = () => console.log("WS closed");
+    });
+</script>
+
+
+{% endblock %}

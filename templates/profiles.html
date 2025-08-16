@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block title %} Профиль {{name_profile}} {% endblock %}
+{% block main %}
+<script>const csrfToken = "{{ csrf_token }}"; const profileUserName = "{{name_profile}}"
+const userId = {{ rowid_profile }};</script>
+<div class="content-page-box-area">
+    <div class="my-profile-inner-box">
+        <div class="profile-cover-image">
+            <a href="/profile/{{rowid_profile}}">
+                <img src="/static/assets/images/profile_bg.jpg" alt="image">
+            </a>
+        </div>
+
+        <div class="profile-info-box">
+            <div class="inner-info-box d-flex justify-content-between align-items-center">
+                <div class="info-image">
+                    <a href="/messages/{{rowid_profile}}">
+                        <img src="{{path_profile}}" alt="avatar" style="width: 250px; height: 250px">
+                    </a>
+                    {% if rowid_profile == rowid %}
+                    <!-- изменение аватарки -->
+                    <div class="icon">
+
+                        <form id="avatarForm" action="/profile/upload_avatar" method="POST" enctype="multipart/form-data"
+                            style="display: none;">
+                            <input type="file" id="getImage" name="avatar" accept="image/png, image/jpeg">
+                            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+                        </form>
+
+                        <a href="" onclick="triggerFileInput(event)">
+                            <i class="flaticon-photo-camera"></i>
+                        </a>
+
+                        <script> // загрузка аватарки
+                            function triggerFileInput(event) {
+                                event.preventDefault();
+                                alert("Внимание!\nИзображение должно быть формата .png .jpg .jpeg\nВесить не более 2МБ\nРекомендуемый размер: 250x250 пикселей");
+                                document.getElementById('getImage').click();
+                            }
+
+                            document.getElementById('getImage').addEventListener('change', function () {
+                                if (this.files.length > 0) {
+                                    document.getElementById('avatarForm').submit();
+                                }
+                            });
+                        </script>
+
+                    </div>
+                    {% else %}
+                    <div class="icon">
+                        <form id="friendRequestForm" action="/profile/add-friend" method="POST" style="display: none;">
+                            <input type="hidden" name="user_id" value="{{rowid_profile}}">
+                            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+                        </form>
+                        <a href="" onclick="submitFriendForm(event)">
+                            <i class="flaticon-friends"></i>
+                        </a>
+                    </div>
+
+                    {% endif %}
+                </div>
+                <div class="info-text ms-3">
+                    <h3><a href="/profile/{{rowid_profile}}">{{name_profile}}</a></h3>
+                    <span><a href="mailto:{{login_profile}}">{{login_profile}}</a></span>
+                </div>
+                <ul class="statistics">
+
+                    <li>
+                        <a href="" onclick="return false;">
+                            <span class="item-number">{{sub}}</span>
+                            <span class="item-text">Подписки</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="" onclick="return false;">
+                            <span class="item-number">{{followers}}</span>
+                            <span class="item-text">Подписчики</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="profile-list-tabs">
+                <ul class="nav nav-tabs" id="myTab" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="timeline-tab" data-bs-toggle="tab" href="#posts" role="tab"
+                            aria-controls="timeline">Посты ({{posts}})</a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" id="about-tab" data-bs-toggle="tab" href="#sub" role="tab"
+                            aria-controls="about">Подписки ({{sub}})</a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" id="friends-tab" data-bs-toggle="tab" href="#likes" role="tab"
+                            aria-controls="friends">Понравившиеся ({{likes}})</a>
+                    </li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="tab-content" id="myTabContent">
+        <div class="tab-pane fade show active" id="posts" role="tabpanel">
+            <div class="row" style="justify-content: center">
+                <div class="col-lg-6 col-md-12">
+                    <div class="news-feed-area" id="posts-container">
+                        {% if rowid_profile == rowid %}
+                        <div class="news-feed news-feed-form">
+                            <h3 class="news-feed-title">Новый пост</h3>
+
+                            <form action="/profile/new-post" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+                                <div class="form-group">
+                                    <textarea name="text_post" class="form-control"
+                                        placeholder="Введите текст (до 300 символов)" maxlength="300" required
+                                        style="max-height: 500px;"></textarea>
+                                </div>
+                                <ul class="button-group d-flex justify-content-between align-items-center">
+                                    <li></li>
+                                    <li></li>
+                                    <li></li>
+                                    <li class="post-btn">
+                                        <button type="submit">Отправить</button>
+                                    </li>
+                                </ul>
+                            </form>
+                        </div>
+                        {% elif not posts %}
+                        <div class="news-feed news-feed-form">
+                            <h3 class="news-feed-title" style="text-align: center;">У {{name_profile}} нет постов :c
+                            </h3>
+                        </div>
+                        {% endif %}
+                        <!-- посты -->
+                         <div class="load-more-posts-btn" id="loader">
+                            <a href="" onclick="return false;"><i class="flaticon-loading"></i>Загрузка...</a>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- блок подписки -->
+        <div class="tab-pane fade" id="sub" role="tabpanel">
+            {% if sub == 0 %}
+            <div class="row justify-content-center">
+                <div class="col-lg-6 col-md-12">
+                    <div class="friends-inner-box-style d-flex justify-content-between align-items-center">
+                        <div class="title">
+                            {% if rowid_profile == rowid %}
+                            <h3>Вы ни на кого не подписаны :c</h3>
+                            {% else %}
+                            <h3>Пользователь {{ name_profile }} ни на кого не подписан :c</h3>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="row justify-content-center news-feed-area">
+                    <!-- подписки -->
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- блок лайки -->
+        <div class="tab-pane fade" id="likes" role="tabpanel">
+            {% if likes == 0 %}
+            {% if rowid_profile == rowid %}
+            <div class="friends-inner-box-style d-flex justify-content-between align-items-center">
+                <div class="title">
+                    <h3>Вы ничего не лайкали :c</h3>
+                </div>
+            </div>
+            {% else %}
+            <div class="friends-inner-box-style d-flex justify-content-between align-items-center">
+                <div class="title">
+                    <h3>{{name_profile}} ничего не лайкал :c</h3>
+                </div>
+            </div>
+            {% endif %}
+            {% else %}
+                    <div class="row" style="justify-content: center">
+                        <div class="col-lg-6 col-md-12">
+                            <div class="news-feed-area" id="posts-container">
+                                <!-- лайки -->
+                            </div>
+                        </div>
+                    </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block other_links_bottom %}
+<script src="/static/assets/js/edit-delete-post.js"></script>
+<script src="/static/assets/js/like-and-sub.js"></script>
+
+<script>
+window.PROFILE_PAGE = {
+  userId: {{ rowid_profile|default('null') }},
+  viewerId: {{ rowid|default('null') }},
+  csrfToken: {{ csrf_token|tojson }}
+};
+</script>
+
+<script src="/static/assets/js/profile-tabs.js"></script>
+{% endblock %}
