@@ -1,5 +1,5 @@
 function base64ToArrayBuffer(base64) {
-    // Убираем все переносы строк и пробелы
+    // убираем все переносы строк и пробелы
     base64 = base64.replace(/-----.*-----/g, "").replace(/\s+/g, "");
     try {
         const binaryString = atob(base64);
@@ -21,16 +21,16 @@ async function decryptMessage(encryptedMessageBase64) {
             throw new Error("Зашифрованное сообщение пустое или слишком короткое");
         }
 
-        // 1. Получаем приватный ключ из LocalStorage
+        // получаем приватный ключ из LocalStorage
         let privateKeyPem = localStorage.getItem("privateKey");
         if (!privateKeyPem) {
             throw new Error("❌ Приватный ключ не найден в LocalStorage!");
         }
 
-        // 2. Конвертируем PEM в бинарный формат
+        // конвертируем PEM в бинарный формат
         let privateKeyDer = base64ToArrayBuffer(privateKeyPem);
 
-        // 3. Импортируем приватный ключ
+        // импортируем приватный ключ
         let privateKey = await window.crypto.subtle.importKey(
             "pkcs8",
             privateKeyDer,
@@ -39,10 +39,10 @@ async function decryptMessage(encryptedMessageBase64) {
             ["decrypt"]
         );
 
-        // 4. Декодируем зашифрованное сообщение
+        // декодируем зашифрованное сообщение
         let encryptedData = base64ToArrayBuffer(encryptedMessageBase64);
 
-        // 5. Расшифровка
+        // расшифровка
         let decryptedBuffer = await window.crypto.subtle.decrypt(
             { name: "RSA-OAEP" },
             privateKey,
