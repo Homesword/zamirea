@@ -1,4 +1,3 @@
-// Отправка публичного ключа на сервер
 async function sendPublicKeyToServer(publicKeyBase64, rowid) {
 
 try {
