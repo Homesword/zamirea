@@ -53,7 +53,7 @@ async function saveInput(rowid) {
     }
 
     try {
-        // 1. Отправка в базу
+        // отправка в базу
         const response = await fetch(`/messages/send-message/${rowid}`, { 
             method: "POST",
             headers: {
@@ -66,14 +66,14 @@ async function saveInput(rowid) {
             throw new Error("Ошибка при передаче сообщения в базу.");
         }
 
-        // 2. Отправка по WebSocket
+        // отправка по WebSocket
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(userText);
         } else {
             console.warn("⚠️ WebSocket не подключен, сообщение будет видно только после перезагрузки");
         }
 
-        // 3. Очистка поля
+        // очистка поля
         inputElement.value = "";
 
     } catch (error) {
